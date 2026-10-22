@@ -1,0 +1,81 @@
+{
+  "id": "002",
+  "title": "Random restarts",
+  "difficulty": 1,
+  "estimatedTime": "30–60 min",
+  "summary": "The API keeps restarting every few minutes, with short bursts of errors in between.",
+  "alert": "[FIRING] ApiRestarting: shopflow-api restarted 3 times in the last 15 minutes",
+  "submit": {
+    "questions": [
+      {
+        "id": "resource",
+        "type": "choice",
+        "prompt": "What runs out before each restart?",
+        "choices": [
+          { "id": "cpu", "label": "CPU" },
+          { "id": "heap", "label": "JavaScript heap memory" },
+          { "id": "db-pool", "label": "Database connections" },
+          { "id": "fds", "label": "File descriptors / sockets" },
+          { "id": "disk", "label": "Disk space" },
+          { "id": "event-loop", "label": "Event loop time" }
+        ],
+        "answers": ["17e51ed03eba588d989843309cce92a24c79598bc8e9a019c754c8a0db55605e"]
+      },
+      {
+        "id": "retainer",
+        "type": "choice",
+        "prompt": "What keeps that memory from being freed?",
+        "choices": [
+          { "id": "cache", "label": "An in-memory cache that never lets go of entries" },
+          { "id": "listeners", "label": "Event listeners added on every request" },
+          { "id": "connections", "label": "Database connections that are never released" },
+          { "id": "metrics", "label": "Metric labels with unbounded values" },
+          { "id": "timers", "label": "Timers or intervals that are never cleared" },
+          { "id": "bodies", "label": "Large request bodies buffered in memory" }
+        ],
+        "answers": ["b04084bf9d3f39706b0e614ee98717f968bffd558ffde8b0fc40175b4304cad3"]
+      },
+      {
+        "id": "trigger",
+        "type": "choice",
+        "prompt": "Why did it get so much worse this week?",
+        "choices": [
+          { "id": "volume", "label": "More requests per second than the service can handle" },
+          { "id": "tracking", "label": "Every campaign click has a unique URL (utm_* and fbclid parameters)" },
+          { "id": "pages", "label": "Bigger product pages since the image gallery release" },
+          { "id": "bots", "label": "Crawlers requesting product ids that don't exist" },
+          { "id": "orders", "label": "More orders being placed" }
+        ],
+        "answers": ["f0dd94b0377f9510285da170bb819ba3572e34ca02ed06795505a21c3db836f5"]
+      }
+    ]
+  },
+  "verify": {
+    "warmupSeconds": 60,
+    "durationSeconds": 120,
+    "slos": [
+      {
+        "label": "Catalog p95",
+        "metric": "http_req_duration{journey:catalog}",
+        "stat": "p(95)",
+        "max": 250,
+        "unit": "ms"
+      },
+      { "label": "Error rate", "metric": "http_req_failed", "stat": "rate", "max": 0.005, "unit": "ratio" },
+      {
+        "label": "Restarts",
+        "source": "prometheus",
+        "query": "changes(process_start_time_seconds{job=\"api\"}[$range])",
+        "max": 0,
+        "unit": "count"
+      },
+      {
+        "label": "Live heap growth",
+        "source": "prometheus",
+        "query": "deriv(nodejs_heap_used_after_gc_bytes{job=\"api\"}[$range])",
+        "max": 307200,
+        "unit": "bytes/s"
+      }
+    ]
+  }
+}

@@ -47,7 +47,13 @@ Write it like a page from on-call: an alert, a message from Support, what you kn
   ```
 
   Add every accepted spelling's hash to `answers`.
-- `verify.slos`: user-facing SLOs evaluated on the k6 summary (`metric` + `stat` + `max`). Choose targets the broken code clearly misses and the reference fix clearly meets.
+- `verify.slos`: SLOs with a `max` and a `unit` (`ms`, `ratio`, `count`, `bytes/s`). User-facing ones read the k6 summary (`metric` + `stat`); server-side ones use `"source": "prometheus"` and a `query` where `$range` is the measured window:
+
+  ```json
+  { "label": "Restarts", "source": "prometheus", "query": "changes(process_start_time_seconds{job=\"api\"}[$range])", "max": 0, "unit": "count" }
+  ```
+
+  Choose targets the broken code clearly misses and the reference fix clearly meets, with margin on both sides: measure each a few times. Lengthen `warmupSeconds`/`durationSeconds` when a signal needs time to settle (caches filling up, memory trends).
 
 ## 5. Functional checks (`checks.ts`)
 

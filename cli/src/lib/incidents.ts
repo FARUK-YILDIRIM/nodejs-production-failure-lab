@@ -7,15 +7,22 @@ export type Question =
   | { id: string; prompt: string; type: 'endpoint' | 'text'; hint?: string; answers: string[] }
   | { id: string; prompt: string; type: 'choice'; choices: { id: string; label: string }[]; answers: string[] };
 
-/** A user-facing service level objective, evaluated on the k6 end-of-test summary. */
+/**
+ * A service level objective checked by `./lab verify`. By default it is read from
+ * the k6 end-of-test summary (client side); `source: "prometheus"` evaluates a
+ * PromQL query over exactly the measured window instead.
+ */
 export interface Slo {
   label: string;
-  /** k6 metric name, optionally with a tag filter: `http_req_duration{journey:catalog}`. */
-  metric: string;
-  /** k6 summary stat: `p(95)`, `avg`, `rate`… */
-  stat: string;
+  source?: 'k6' | 'prometheus';
+  /** k6: metric name, optionally with a tag filter: `http_req_duration{journey:catalog}`. */
+  metric?: string;
+  /** k6: summary stat: `p(95)`, `avg`, `rate`… */
+  stat?: string;
+  /** prometheus: PromQL where `$range` stands for the measured window, e.g. `changes(x[$range])`. */
+  query?: string;
   max: number;
-  unit: 'ms' | 'ratio';
+  unit: 'ms' | 'ratio' | 'count' | 'bytes/s';
 }
 
 /** incident.json */
@@ -28,6 +35,8 @@ export interface IncidentManifest {
   alert: string;
   submit: { questions: Question[] };
   verify: { warmupSeconds: number; durationSeconds: number; slos: Slo[] };
+  /** Compose services built from app/ that `./lab deploy` restarts. Default: ["api"]. */
+  services?: string[];
 }
 
 export interface Incident extends IncidentManifest {
@@ -38,8 +47,8 @@ export interface Incident extends IncidentManifest {
   appSrcDir: string;
   readme: string;
   spoilersDir: string;
-  /** The service students change and deploy. */
-  appService: 'api';
+  /** The services students change and deploy; the first one is the main API. */
+  appServices: string[];
 }
 
 function load(slug: string): Incident {
@@ -54,7 +63,7 @@ function load(slug: string): Incident {
     appSrcDir: path.join(dir, 'app', 'src'),
     readme: path.join(dir, 'README.md'),
     spoilersDir: path.join(SPOILERS_DIR, slug),
-    appService: 'api',
+    appServices: manifest.services ?? ['api'],
   };
 }
 

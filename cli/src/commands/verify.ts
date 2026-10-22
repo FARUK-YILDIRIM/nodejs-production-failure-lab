@@ -21,8 +21,19 @@ const formatMs = (ms: number) => (ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 
 
 function formatSlo(slo: Slo, value: number | null | undefined): string {
   if (value === null || value === undefined) return dim('n/a');
-  return slo.unit === 'ms' ? formatMs(value) : `${(value * 100).toFixed(2)} %`;
+  switch (slo.unit) {
+    case 'ms':
+      return formatMs(value);
+    case 'ratio':
+      return `${(value * 100).toFixed(2)} %`;
+    case 'count':
+      return String(Math.round(value));
+    case 'bytes/s':
+      return Math.abs(value) >= 1024 * 1024 ? `${(value / 1024 / 1024).toFixed(1)} MB/s` : `${Math.round(value / 1024)} KB/s`;
+  }
 }
+
+const formatTarget = (slo: Slo) => (slo.unit === 'count' && slo.max === 0 ? '= 0' : `< ${formatSlo(slo, slo.max)}`);
 
 function formatRuntime(unit: (typeof RUNTIME_METRICS)[number]['unit'], value: number | undefined): string {
   if (value === undefined) return dim('n/a');
@@ -50,7 +61,7 @@ function printResults(incident: Incident, after: Measurement, before: Measuremen
     slo.label,
     ...(before ? [formatSlo(slo, before.slos[index])] : []),
     bold(formatSlo(slo, after.slos[index])),
-    `< ${formatSlo(slo, slo.max)}`,
+    formatTarget(slo),
     verdicts[index] ? green('✔') : red('✘'),
   ]);
   const runtimeRows = RUNTIME_METRICS.map((metric) => [
@@ -111,7 +122,13 @@ export async function verify(args: string[], flags: { ci: boolean; expectFail: b
     else log.ok(dim(check.name));
   }
   if (checks.some((check) => check.error)) {
-    log.fail(bold('Functional checks failed: a fix must not change what the API returns.'));
+    log.fail(
+      bold(
+        checks.some((check) => check.error && check.unavailable)
+          ? 'Functional checks failed: the API kept going down while they ran.'
+          : 'Functional checks failed: a fix must not change what the API returns.',
+      ),
+    );
     process.exitCode = 1;
     return;
   }

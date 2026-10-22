@@ -55,18 +55,47 @@ export const api: Api = {
 export interface CheckResult {
   name: string;
   error?: string;
+  /** The API was down (crashing or restarting), so the check says nothing about behavior. */
+  unavailable?: boolean;
+}
+
+async function healthy(): Promise<boolean> {
+  try {
+    return (await fetch(`${urls.api}/health`, { signal: AbortSignal.timeout(2_000) })).ok;
+  } catch {
+    return false;
+  }
+}
+
+async function waitUntilHealthy(timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await healthy()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  return false;
 }
 
 export async function runChecks(incident: Incident): Promise<CheckResult[]> {
   const module = (await import(pathToFileURL(path.join(incident.dir, 'checks.ts')).href)) as { checks: Check[] };
   const results: CheckResult[] = [];
   for (const check of module.checks) {
-    try {
-      await check.run(api);
-      results.push({ name: check.name });
-    } catch (err) {
-      results.push({ name: check.name, error: err instanceof Error ? err.message : String(err) });
+    let result: CheckResult = { name: check.name };
+    // A failure while the API is down (e.g. restarting after a crash) isn't a behavior
+    // change: wait for it to come back and try again.
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await check.run(api);
+        result = { name: check.name };
+        break;
+      } catch (err) {
+        result = { name: check.name, error: err instanceof Error ? err.message : String(err) };
+        if (await healthy()) break;
+        result.unavailable = true;
+        await waitUntilHealthy(60_000);
+      }
     }
+    results.push(result);
   }
   return results;
 }

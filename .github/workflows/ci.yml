@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        incident: [001-latency-spike]
+        incident: [001-latency-spike, 002-random-restarts]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

@@ -76,7 +76,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 5,
         "x": 0,
         "y": 1
       },
@@ -140,8 +140,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 6,
+        "w": 5,
+        "x": 5,
         "y": 1
       },
       "fieldConfig": {
@@ -196,8 +196,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 12,
+        "w": 5,
+        "x": 10,
         "y": 1
       },
       "fieldConfig": {
@@ -248,6 +248,70 @@
     {
       "type": "stat",
       "id": 5,
+      "title": "API restarts (1h)",
+      "description": "How many times the API process started in the last hour (deploys included).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 15,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 2
+              },
+              {
+                "color": "red",
+                "value": 4
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(changes(process_start_time_seconds{job=\"api\"}[1h])) or vector(0)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 6,
       "title": "Firing alerts",
       "description": "Prometheus alerts currently firing (see Prometheus → Alerts).",
       "datasource": {
@@ -256,8 +320,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 18,
+        "w": 4,
+        "x": 20,
         "y": 1
       },
       "fieldConfig": {
@@ -307,7 +371,7 @@
     },
     {
       "type": "timeseries",
-      "id": 6,
+      "id": 7,
       "title": "Latency at the edge",
       "description": "Request duration percentiles as seen by Traefik, i.e. by customers.",
       "datasource": {
@@ -378,7 +442,7 @@
     },
     {
       "type": "timeseries",
-      "id": 7,
+      "id": 8,
       "title": "Requests per second by status",
       "description": "Traffic at the edge, split by HTTP status code.",
       "datasource": {
@@ -432,7 +496,7 @@
     {
       "type": "row",
       "title": "Inside the API (measured by the service itself)",
-      "id": 8,
+      "id": 9,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -444,7 +508,7 @@
     },
     {
       "type": "timeseries",
-      "id": 9,
+      "id": 10,
       "title": "Latency measured by the API (p95 by route)",
       "description": "From the moment Express starts handling a request until the response is sent.",
       "datasource": {
@@ -497,7 +561,7 @@
     },
     {
       "type": "timeseries",
-      "id": 10,
+      "id": 11,
       "title": "Requests per second by route",
       "description": "Requests handled by the API, by route template.",
       "datasource": {
@@ -550,7 +614,7 @@
     },
     {
       "type": "timeseries",
-      "id": 11,
+      "id": 12,
       "title": "Database query time seen by the API (p95 by query)",
       "description": "Measured in the API around each query: from sending it to getting the rows back.",
       "datasource": {
@@ -603,7 +667,7 @@
     },
     {
       "type": "timeseries",
-      "id": 12,
+      "id": 13,
       "title": "Database connection pool",
       "description": "Connections held by the pg pool (max 10) and requests waiting for one.",
       "datasource": {
@@ -675,7 +739,7 @@
     {
       "type": "row",
       "title": "Node.js runtime",
-      "id": 13,
+      "id": 14,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -687,7 +751,7 @@
     },
     {
       "type": "timeseries",
-      "id": 14,
+      "id": 15,
       "title": "CPU",
       "description": "CPU time used by the API process, in cores. The container is limited to 1 core.",
       "datasource": {
@@ -741,7 +805,7 @@
     },
     {
       "type": "timeseries",
-      "id": 15,
+      "id": 16,
       "title": "Event loop delay",
       "description": "How late the event loop runs scheduled work (perf_hooks.monitorEventLoopDelay), per scrape interval.",
       "datasource": {
@@ -812,7 +876,7 @@
     },
     {
       "type": "timeseries",
-      "id": 16,
+      "id": 17,
       "title": "Event loop utilization",
       "description": "Share of time the event loop was busy (not idle) between scrapes.",
       "datasource": {
@@ -866,9 +930,9 @@
     },
     {
       "type": "timeseries",
-      "id": 17,
+      "id": 18,
       "title": "Memory",
-      "description": "V8 heap and process resident memory. The container is limited to 512 MB.",
+      "description": "V8 heap and process resident memory. The container is limited to 512 MB; the heap limit is where the process crashes.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -920,9 +984,18 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "nodejs_heap_size_total_bytes{job=\"api\"}",
-          "legendFormat": "heap total",
+          "expr": "nodejs_heap_used_after_gc_bytes{job=\"api\"}",
+          "legendFormat": "live heap (after full GC)",
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "nodejs_heap_size_limit_bytes{job=\"api\"}",
+          "legendFormat": "heap limit",
+          "refId": "C"
         },
         {
           "datasource": {
@@ -931,13 +1004,13 @@
           },
           "expr": "process_resident_memory_bytes{job=\"api\"}",
           "legendFormat": "rss",
-          "refId": "C"
+          "refId": "D"
         }
       ]
     },
     {
       "type": "timeseries",
-      "id": 18,
+      "id": 19,
       "title": "Garbage collection",
       "description": "Share of time spent in GC, by kind.",
       "datasource": {
@@ -991,7 +1064,7 @@
     {
       "type": "row",
       "title": "Database (PostgreSQL)",
-      "id": 19,
+      "id": 20,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1003,7 +1076,7 @@
     },
     {
       "type": "table",
-      "id": 20,
+      "id": 21,
       "title": "Top queries by total time (pg_stat_statements)",
       "description": "Measured inside PostgreSQL, cumulative since the statistics were last reset.",
       "datasource": {
@@ -1054,7 +1127,7 @@
     {
       "type": "row",
       "title": "Dig deeper",
-      "id": 21,
+      "id": 22,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1066,7 +1139,7 @@
     },
     {
       "type": "text",
-      "id": 22,
+      "id": 23,
       "title": "Tools",
       "gridPos": {
         "h": 6,

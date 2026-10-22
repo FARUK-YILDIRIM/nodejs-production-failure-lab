@@ -6,7 +6,7 @@ export async function logs(args: string[]): Promise<void> {
   const incident = incidentFromArgs([]);
   await ensureDocker();
   await ensureRunning(incident);
-  await compose(incident, ['logs', '--follow', '--tail', '100', args[0] ?? incident.appService], { inherit: true });
+  await compose(incident, ['logs', '--follow', '--tail', '100', args[0] ?? incident.appServices[0] ?? 'api'], { inherit: true });
 }
 
 export async function psql(): Promise<void> {

@@ -75,8 +75,11 @@ async function promQuery(expr: string, at: Date): Promise<number | undefined> {
   }
 }
 
-export function sloValue(summary: K6Summary, slo: Slo): number | null {
-  const value = summary.metrics[slo.metric]?.values[slo.stat];
+async function sloValue(slo: Slo, summary: K6Summary, range: string, at: Date): Promise<number | null> {
+  if (slo.source === 'prometheus') {
+    return slo.query ? ((await promQuery(slo.query.replaceAll('$range', range), at)) ?? null) : null;
+  }
+  const value = slo.metric && slo.stat ? summary.metrics[slo.metric]?.values[slo.stat] : undefined;
   return typeof value === 'number' ? value : null;
 }
 
@@ -102,13 +105,16 @@ export async function measure(incident: Incident, label: string, sourceHash: str
     if (value !== undefined) runtime[metric.id] = value;
   }
 
+  const sloValues: (number | null)[] = [];
+  for (const slo of slos) sloValues.push(await sloValue(slo, summary, range, endedAt));
+
   return {
     label,
     sourceHash,
     measuredAt: endedAt.toISOString(),
     durationSeconds,
     requests: summary.metrics.http_reqs?.values.count ?? 0,
-    slos: slos.map((slo) => sloValue(summary, slo)),
+    slos: sloValues,
     runtime,
   };
 }

@@ -37,7 +37,7 @@ export async function reset(args: string[], flags: { yes: boolean }): Promise<vo
 
   if (running) {
     await ensureDocker();
-    if ((await runningServices(incident)).includes(incident.appService)) {
+    if ((await runningServices(incident)).includes(incident.appServices[0] ?? 'api')) {
       log.step('Redeploying the original code…');
       await deploy(incident, { note: 'Reset to original code' });
       const fresh = loadState();

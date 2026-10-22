@@ -32,3 +32,10 @@ groups:
           severity: page
         annotations:
           summary: "Prometheus cannot scrape the API"
+
+      - alert: ApiRestarting
+        expr: changes(process_start_time_seconds{job="api"}[15m]) >= 2
+        labels:
+          severity: page
+        annotations:
+          summary: "The API process restarted {{ $value }} times in the last 15 minutes"

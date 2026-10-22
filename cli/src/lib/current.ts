@@ -14,7 +14,7 @@ export function incidentFromArgs(args: string[]): Incident {
 export async function ensureRunning(incident: Incident): Promise<void> {
   const { current } = loadState();
   const services = await runningServices(incident);
-  if (current !== incident.id || !services.includes(incident.appService)) {
+  if (current !== incident.id || !incident.appServices.every((service) => services.includes(service))) {
     throw new LabError(`Incident ${incident.id} is not running. Start it with \`./lab start ${incident.id}\`.`);
   }
 }

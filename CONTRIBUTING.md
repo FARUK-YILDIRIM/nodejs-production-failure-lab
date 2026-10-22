@@ -17,6 +17,8 @@ Open an issue first with the design from [docs/authoring-incidents.md](docs/auth
 
 ## Conventions
 
+- The Grafana dashboard is generated: edit `scripts/build-dashboard.mjs`, then run `node scripts/build-dashboard.mjs`.
+- Keep `incident.json` files compact: `python3 scripts/format-incident-json.py incidents/*/incident.json`.
 - Only erasable TypeScript (no `enum`, `namespace` or constructor parameter properties): Node strips types, it doesn't compile them.
 - Keep spoilers out of `incidents/`: no hints in names, comments or commit messages that land in the incident folder.
 - Numbers in docs come from `./lab verify` runs; say what hardware they were measured on.

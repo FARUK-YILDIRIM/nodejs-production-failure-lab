@@ -13,7 +13,7 @@ export async function deploy(
 ): Promise<void> {
   await composeOrFail(
     incident,
-    ['up', '-d', '--no-deps', '--force-recreate', '--wait', '--wait-timeout', '120', ...(build ? ['--build'] : []), incident.appService],
+    ['up', '-d', '--no-deps', '--force-recreate', '--wait', '--wait-timeout', '120', ...(build ? ['--build'] : []), ...incident.appServices],
     'Deploy',
     { env: sourceDir ? { LAB_APP_SRC: sourceDir } : {} },
   );

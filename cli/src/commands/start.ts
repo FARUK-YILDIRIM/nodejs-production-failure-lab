@@ -30,7 +30,7 @@ export async function start(args: string[], flags: { traffic: boolean }): Promis
   const sourceHash = hashTree(incident.appSrcDir);
   // `up` leaves a running service alone, so an undeployed change would stay undeployed.
   const staleDeploy =
-    (await runningServices(incident)).includes(incident.appService) && progress.deployedHash !== sourceHash;
+    (await runningServices(incident)).includes(incident.appServices[0] ?? 'api') && progress.deployedHash !== sourceHash;
 
   const services = (await defaultServices(incident)).filter((service) => flags.traffic || service !== 'traffic');
   await composeOrFail(incident, ['up', '-d', '--build', '--remove-orphans', '--wait', '--wait-timeout', '300', ...services], 'Starting the incident', {
