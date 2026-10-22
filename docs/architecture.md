@@ -38,6 +38,8 @@ The service's `src/` is bind-mounted into its container, so `./lab deploy` only 
 
 On first start, the CLI snapshots the original `src/` into `.lab/snapshots/` (from git `HEAD` when the incident is committed). The snapshot is the reference for "before" measurements and for `./lab reset`.
 
+Some fixes change the database (an index, a column). Those incidents set `"resetDatabase": true`: their seed ends by copying the database to `shop_pristine` (`db/04-template.sh`), and `verify` and `reset` recreate `shop` from that template in seconds before deploying. The service applies its own SQL migrations from `src/migrations` at startup, so a database fix is part of the code like any other.
+
 ## Telemetry
 
 | Signal | Producer | Store | Notes |
@@ -47,7 +49,7 @@ On first start, the CLI snapshots the original `src/` into `.lab/snapshots/` (fr
 | Traces | Traefik + OpenTelemetry (http, express, pg, pino) | Jaeger | 20 % sampled at the edge; the service follows the parent's decision |
 | Profiles | `@pyroscope/nodejs` | Pyroscope | Wall-clock with CPU time, and heap; browse them in Grafana → Drilldown → Profiles |
 | Logs | pino (JSON on stdout) | `docker compose logs` | Slow and failed requests, with `trace_id` |
-| Database | `pg_stat_statements`, slow query log | PostgreSQL | Also on the dashboard via Grafana's PostgreSQL data source |
+| Database | postgres-exporter (`pg_stat_statements`, sessions, table scans), slow query log | Prometheus, PostgreSQL | Also on the dashboard via Grafana's PostgreSQL data source |
 
 The service's instrumentation is loaded with `node --import ./src/telemetry/register.ts`. It registers `import-in-the-middle` as a synchronous module hook (Node ≥ 24.11) limited to the packages OpenTelemetry patches, then starts tracing and profiling before any application module loads.
 

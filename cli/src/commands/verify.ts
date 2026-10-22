@@ -1,6 +1,7 @@
 import { runChecks } from '../lib/checks.ts';
 import { compose, composeOrFail, ensureDocker, runningServices } from '../lib/compose.ts';
 import { ensureRunning, incidentFromArgs } from '../lib/current.ts';
+import { restoreDatabase } from '../lib/database.ts';
 import { deploy } from '../lib/deploy.ts';
 import type { Incident, Slo } from '../lib/incidents.ts';
 import { loadBaseline, measure, RUNTIME_METRICS, saveBaseline, saveRun, type Measurement } from '../lib/measure.ts';
@@ -27,7 +28,7 @@ function formatSlo(slo: Slo, value: number | null | undefined): string {
     case 'ratio':
       return `${(value * 100).toFixed(2)} %`;
     case 'count':
-      return String(Math.round(value));
+      return Number.isInteger(value) ? String(value) : value.toFixed(2);
     case 'bytes/s':
       return Math.abs(value) >= 1024 * 1024 ? `${(value / 1024 / 1024).toFixed(1)} MB/s` : `${Math.round(value / 1024)} KB/s`;
   }
@@ -143,6 +144,7 @@ export async function verify(args: string[], flags: { ci: boolean; expectFail: b
       before = loadBaseline(incident, originalHash);
       if (!before) {
         log.step(`Measuring the original code first (only once, ~${warmupSeconds + durationSeconds + 30}s)…`);
+        if (incident.resetDatabase) await restoreDatabase(incident);
         await deploy(incident, { sourceDir: snapshot, note: 'Deployed original code (baseline)' });
         try {
           before = await measure(incident, 'original', originalHash);
@@ -151,6 +153,12 @@ export async function verify(args: string[], flags: { ci: boolean; expectFail: b
           await deploy(incident, { note: 'Deployed working copy (verify)' });
         }
       }
+    }
+
+    if (incident.resetDatabase) {
+      log.step('Restoring the original database; your migrations run again on deploy…');
+      await restoreDatabase(incident);
+      await deploy(incident, { note: 'Deployed working copy on the original database (verify)' });
     }
 
     log.step(`Load test: ${warmupSeconds}s warm-up, then ${durationSeconds}s of the standard traffic mix…`);

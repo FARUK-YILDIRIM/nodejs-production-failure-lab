@@ -23,6 +23,11 @@ scrape_configs:
       - source_labels: [__meta_dns_name]
         target_label: instance
 
+  # The incident's PostgreSQL, through postgres-exporter.
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
   # The edge proxy: latency as experienced by clients.
   - job_name: traefik
     static_configs:

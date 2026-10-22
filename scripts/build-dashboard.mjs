@@ -92,6 +92,15 @@ ts('Active libuv resources, by type', 'process.getActiveResourcesInfo() at each 
 ], { w: 24 });
 
 row('Database (PostgreSQL)');
+ts('Database time per second, by query', 'Seconds of query execution per second (≈ how many queries run at once), from pg_stat_statements via postgres-exporter.', [
+  ['topk(5, sum by (queryid) (rate(pg_stat_statements_seconds_total{datname="shop"}[$__rate_interval])) * on (queryid) group_left(query) max by (queryid, query) (pg_stat_statements_query_id))', '{{query}}'],
+], { w: 8, unit: 's', stack: true, newRow: false });
+ts('Database sessions, by state', 'Server-side sessions (backends) of the shop database.', [
+  ['sum by (state) (pg_stat_activity_count{datname="shop", state=~"active|idle|idle in transaction"})', '{{state}}'],
+], { w: 8, x: 8, newRow: false });
+ts('Rows read by sequential scans, by table', 'Rows PostgreSQL read by scanning whole tables (no index), per second.', [
+  ['sum by (relname) (rate(pg_stat_user_tables_seq_tup_read{datname="shop"}[$__rate_interval]))', '{{relname}}'],
+], { w: 8, x: 16 });
 panels.push({
   type: 'table', id: ++id, title: 'Top queries by total time (pg_stat_statements)', description: 'Measured inside PostgreSQL, cumulative since the statistics were last reset.', datasource: PG, gridPos: { h: 9, w: 24, x: 0, y },
   targets: [{ datasource: PG, refId: 'A', format: 'table', rawQuery: true, editorMode: 'code', rawSql: "SELECT left(regexp_replace(query, '\\s+', ' ', 'g'), 140) AS query, calls, round(mean_exec_time::numeric, 2) AS \"mean ms\", round(max_exec_time::numeric, 2) AS \"max ms\", round(total_exec_time::numeric) AS \"total ms\", rows FROM pg_stat_statements WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database()) AND query NOT ILIKE '%pg_stat_statements%' ORDER BY total_exec_time DESC LIMIT 10" }],

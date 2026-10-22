@@ -72,6 +72,17 @@ services:
       - "127.0.0.1:${LAB_PORT_JAEGER:-16686}:16686"
     restart: unless-stopped
 
+  # Database metrics for every incident's PostgreSQL: sessions, table scans, pg_stat_statements.
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    command:
+      - --collector.stat_statements
+      - --collector.stat_statements.include_query
+      - --collector.stat_statements.query_length=160
+    environment:
+      DATA_SOURCE_NAME: postgresql://shop:shop@postgres:5432/shop?sslmode=disable
+    restart: unless-stopped
+
   pyroscope:
     image: grafana/pyroscope:2.1.2
     ports:

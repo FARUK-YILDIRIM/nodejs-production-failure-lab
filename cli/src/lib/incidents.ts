@@ -37,6 +37,11 @@ export interface IncidentManifest {
   verify: { warmupSeconds: number; durationSeconds: number; slos: Slo[] };
   /** Compose services built from app/ that `./lab deploy` restarts. Default: ["api"]. */
   services?: string[];
+  /**
+   * The fix changes the database (a migration). `verify` and `reset` then start
+   * from the pristine seeded database, so only changes shipped with the code count.
+   */
+  resetDatabase?: boolean;
 }
 
 export interface Incident extends IncidentManifest {

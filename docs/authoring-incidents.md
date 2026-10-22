@@ -55,6 +55,8 @@ Write it like a page from on-call: an alert, a message from Support, what you kn
 
   Choose targets the broken code clearly misses and the reference fix clearly meets, with margin on both sides: measure each a few times. Lengthen `warmupSeconds`/`durationSeconds` when a signal needs time to settle (caches filling up, memory trends).
 
+If the fix changes the database, set `"resetDatabase": true`, end the seed with `db/04-template.sh` (copy it from incident 005) and ship the fix as a migration in `app/src/migrations`.
+
 ## 5. Functional checks (`checks.ts`)
 
 Every deterministic endpoint gets a golden SHA-256 of its response body, taken from the broken service (it is functionally correct, just slow or fragile):

@@ -1,0 +1,81 @@
+{
+  "id": "005",
+  "title": "Database overload",
+  "difficulty": 1,
+  "estimatedTime": "30–60 min",
+  "summary": "PostgreSQL is pinned at 100 % CPU and every endpoint has become slow.",
+  "alert": "[FIRING] DatabaseBusy: PostgreSQL has spent more than 2 s per second executing queries for 2 minutes",
+  "resetDatabase": true,
+  "submit": {
+    "questions": [
+      {
+        "id": "query",
+        "type": "choice",
+        "prompt": "What is the database spending its time on?",
+        "choices": [
+          { "id": "purchases", "label": "Counting purchases for product pages" },
+          { "id": "reports", "label": "The finance sales exports" },
+          { "id": "orders", "label": "Inserting new orders" },
+          { "id": "listings", "label": "Product listings" },
+          { "id": "maintenance", "label": "Autovacuum and other maintenance" },
+          { "id": "locks", "label": "Waiting on locks" }
+        ],
+        "answers": ["385819dffe0270e76722dd2436466d36f0cd8ec36b349bdc8b58a1e4b104c633"]
+      },
+      {
+        "id": "why",
+        "type": "choice",
+        "prompt": "Why is that query so expensive?",
+        "choices": [
+          { "id": "no-index", "label": "It reads the whole order_items table: nothing indexes product_id" },
+          { "id": "n-plus-one", "label": "It runs once per related product" },
+          { "id": "stats", "label": "Outdated table statistics produce a bad plan" },
+          { "id": "result", "label": "It returns too many rows to the API" },
+          { "id": "waits", "label": "It waits behind long-running transactions" }
+        ],
+        "answers": ["9d07da63becff054dc8fa3c21f0688881b550c2337cef4e82a76e52d6141942c"]
+      },
+      {
+        "id": "trigger",
+        "type": "choice",
+        "prompt": "What turned a slow query into an outage this week?",
+        "choices": [
+          { "id": "crawler", "label": "Googlebot crawling product pages from the new Shopping feed" },
+          { "id": "campaign", "label": "A marketing campaign" },
+          { "id": "growth", "label": "Normal order growth" },
+          { "id": "backup", "label": "A database backup running during the day" },
+          { "id": "upgrade", "label": "A PostgreSQL upgrade" }
+        ],
+        "answers": ["07e9f9d4c2fab9c5d8ce1cc9b01497d2d5a6580e6ade7e23073c4bfa2c2e3b81"]
+      }
+    ]
+  },
+  "verify": {
+    "warmupSeconds": 15,
+    "durationSeconds": 60,
+    "slos": [
+      {
+        "label": "Catalog p95",
+        "metric": "http_req_duration{journey:catalog}",
+        "stat": "p(95)",
+        "max": 250,
+        "unit": "ms"
+      },
+      {
+        "label": "Checkout p95",
+        "metric": "http_req_duration{journey:checkout}",
+        "stat": "p(95)",
+        "max": 400,
+        "unit": "ms"
+      },
+      { "label": "Error rate", "metric": "http_req_failed", "stat": "rate", "max": 0.005, "unit": "ratio" },
+      {
+        "label": "Database time per second",
+        "source": "prometheus",
+        "query": "sum(rate(pg_stat_statements_seconds_total{datname=\"shop\"}[$range]))",
+        "max": 1,
+        "unit": "count"
+      }
+    ]
+  }
+}

@@ -50,7 +50,8 @@ Optional, for editor IntelliSense in the service code: `npm install` in the inci
 | 002 | [Random restarts](incidents/002-random-restarts/README.md) | ★☆☆ | ✅ playable |
 | 003 | [Error bursts](incidents/003-error-bursts/README.md) | ★☆☆ | ✅ playable |
 | 004 | [Slow checkout](incidents/004-slow-checkout/README.md) | ★★☆ | ✅ playable |
-| 005 | Database overload | ★☆☆ | 🛠 next |
+| 005 | [Database overload](incidents/005-database-overload/README.md) | ★☆☆ | ✅ playable |
+| 006 | Slow order history | ★☆☆ | 🛠 next |
 
 Incidents are named after their **symptoms**, never their causes, and difficulty doesn't tell you the category: real incidents don't arrive labeled "database problem". The longer roadmap covers the Node.js runtime, PostgreSQL, distributed systems (timeouts, retries, circuit breakers), messaging and Kafka, and platform limits.
 
@@ -91,7 +92,7 @@ Incidents are named after their **symptoms**, never their causes, and difficulty
   Traefik · edge proxy ─────────────────────── latency as customers see it
           │
           ▼
-  shopflow-api · Node.js 24, TypeScript, Express 5 ───► PostgreSQL 17
+  shopflow-api · Node.js 24, TypeScript, Express 5 ───► PostgreSQL 17 ◄── postgres-exporter
      │ prom-client      │ OpenTelemetry     │ Pyroscope SDK       (pg_stat_statements)
      ▼                  ▼                   ▼
   Prometheus          Jaeger             Pyroscope
