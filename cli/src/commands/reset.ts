@@ -1,6 +1,6 @@
 import { ensureDocker, runningServices } from '../lib/compose.ts';
 import { incidentFromArgs } from '../lib/current.ts';
-import { restoreDatabase } from '../lib/database.ts';
+import { resetEnvironment } from '../lib/environment.ts';
 import { deploy } from '../lib/deploy.ts';
 import { relative } from '../lib/paths.ts';
 import { backupSource, diffTrees, ensureSnapshot, hashTree, replaceTree } from '../lib/source.ts';
@@ -39,9 +39,9 @@ export async function reset(args: string[], flags: { yes: boolean }): Promise<vo
   if (running) {
     await ensureDocker();
     if ((await runningServices(incident)).includes(incident.appServices[0] ?? 'api')) {
-      if (incident.resetDatabase) {
-        log.step('Restoring the original database…');
-        await restoreDatabase(incident);
+      if (incident.resetDatabase || incident.resetServices?.length) {
+        log.step('Restoring the original data…');
+        await resetEnvironment(incident);
       }
       log.step('Redeploying the original code…');
       await deploy(incident, { note: 'Reset to original code' });

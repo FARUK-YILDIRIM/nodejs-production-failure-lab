@@ -6,6 +6,9 @@ import { CheckFailure, expect, expectBody, expectStatus, sha256, type Check } fr
 const MAILWAVE = `http://localhost:${process.env.LAB_PORT_MAILWAVE ?? 8025}`;
 const PAYFLOW = `http://localhost:${process.env.LAB_PORT_PAYFLOW ?? 8090}`;
 
+/** A new card for every order: PayFlow flags two holds of the same amount on one card as a duplicate charge. */
+const card = () => `tok_check${randomUUID().replaceAll('-', '').slice(0, 16)}`;
+
 /** Product pages change as orders come in (the purchase counter); everything else must stay identical. */
 async function expectProductPage(response: Response, expectedSha256: string): Promise<void> {
   expectStatus(response, 200);
@@ -93,7 +96,7 @@ export const checks: Check[] = [
     name: 'POST /api/orders',
     run: async (api) => {
       const product = (await (await api.get('/api/products/4242')).json()) as { priceCents: number };
-      const response = await api.post('/api/orders', { customerId: 4242, items: [{ productId: 4242, quantity: 2 }], paymentToken: 'tok_visa' });
+      const response = await api.post('/api/orders', { customerId: 4242, items: [{ productId: 4242, quantity: 2 }], paymentToken: card() });
       expectStatus(response, 201);
       const order = (await response.json()) as Order;
       expect(order.items.length === 1, 'the order should have exactly one line item');
@@ -109,7 +112,7 @@ export const checks: Check[] = [
         customerId: 4242,
         items: [{ productId: 4242, quantity: 2 }],
         couponCode: 'autumn20',
-        paymentToken: 'tok_visa',
+        paymentToken: card(),
       });
       expectStatus(response, 201);
       const order = (await response.json()) as Order;
@@ -123,22 +126,22 @@ export const checks: Check[] = [
   {
     name: 'POST /api/orders with an expired coupon → 400',
     run: async (api) =>
-      expectStatus(await api.post('/api/orders', { customerId: 4242, items: [{ productId: 4242, quantity: 1 }], couponCode: 'BACK2SCHOOL', paymentToken: 'tok_visa' }), 400),
+      expectStatus(await api.post('/api/orders', { customerId: 4242, items: [{ productId: 4242, quantity: 1 }], couponCode: 'BACK2SCHOOL', paymentToken: card() }), 400),
   },
   {
     name: 'POST /api/orders with a used-up coupon → 400',
     run: async (api) =>
-      expectStatus(await api.post('/api/orders', { customerId: 4242, items: [{ productId: 4242, quantity: 1 }], couponCode: 'VIP50', paymentToken: 'tok_visa' }), 400),
+      expectStatus(await api.post('/api/orders', { customerId: 4242, items: [{ productId: 4242, quantity: 1 }], couponCode: 'VIP50', paymentToken: card() }), 400),
   },
   {
     name: 'POST /api/orders with an unknown coupon → 400',
     run: async (api) =>
-      expectStatus(await api.post('/api/orders', { customerId: 4242, items: [{ productId: 4242, quantity: 1 }], couponCode: 'NOPE2026', paymentToken: 'tok_visa' }), 400),
+      expectStatus(await api.post('/api/orders', { customerId: 4242, items: [{ productId: 4242, quantity: 1 }], couponCode: 'NOPE2026', paymentToken: card() }), 400),
   },
   {
     name: 'POST /api/orders for a doorbuster',
     run: async (api) =>
-      expectStatus(await api.post('/api/orders', { customerId: 4242, items: [{ productId: 1, quantity: 1 }], paymentToken: 'tok_visa' }), 201),
+      expectStatus(await api.post('/api/orders', { customerId: 4242, items: [{ productId: 1, quantity: 1 }], paymentToken: card() }), 201),
   },
   {
     name: 'POST /api/orders with a declined card → 402',
@@ -151,7 +154,7 @@ export const checks: Check[] = [
   {
     name: 'POST /api/orders for a sold-out product → 409',
     run: async (api) =>
-      expectStatus(await api.post('/api/orders', { customerId: 4242, items: [{ productId: 20000, quantity: 1 }], paymentToken: 'tok_visa' }), 409),
+      expectStatus(await api.post('/api/orders', { customerId: 4242, items: [{ productId: 20000, quantity: 1 }], paymentToken: card() }), 409),
   },
   {
     name: 'A refused order leaves no hold on the card',
@@ -179,10 +182,10 @@ export const checks: Check[] = [
     name: 'Two checkouts with different Idempotency-Keys are two orders',
     run: async (api) => {
       // The same customer can buy the same thing twice on purpose.
-      const order = { customerId: 4242, items: [{ productId: 4242, quantity: 1 }], paymentToken: 'tok_visa' };
+      const order = { customerId: 4242, items: [{ productId: 4242, quantity: 1 }] };
       const ids: number[] = [];
       for (const key of [`check-${randomUUID()}`, `check-${randomUUID()}`]) {
-        const response = await api.post('/api/orders', order, { 'Idempotency-Key': key });
+        const response = await api.post('/api/orders', { ...order, paymentToken: card() }, { 'Idempotency-Key': key });
         expectStatus(response, 201);
         ids.push(((await response.json()) as { id: number }).id);
       }
@@ -192,7 +195,7 @@ export const checks: Check[] = [
   {
     name: 'Placing an order sends a confirmation email',
     run: async (api) => {
-      const response = await api.post('/api/orders', { customerId: 77, items: [{ productId: 7, quantity: 1 }], paymentToken: 'tok_visa' });
+      const response = await api.post('/api/orders', { customerId: 77, items: [{ productId: 7, quantity: 1 }], paymentToken: card() });
       expectStatus(response, 201);
       const { id } = (await response.json()) as { id: number };
       for (let attempt = 0; attempt < 20; attempt++) {
@@ -207,7 +210,7 @@ export const checks: Check[] = [
     name: 'POST /api/orders with 11 line items → 400',
     run: async (api) => {
       const items = Array.from({ length: 11 }, (_, index) => ({ productId: index + 1, quantity: 1 }));
-      expectStatus(await api.post('/api/orders', { customerId: 4242, items, paymentToken: 'tok_visa' }), 400);
+      expectStatus(await api.post('/api/orders', { customerId: 4242, items, paymentToken: card() }), 400);
     },
   },
   {

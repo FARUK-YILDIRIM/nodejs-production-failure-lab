@@ -1,0 +1,72 @@
+{
+  "id": "011",
+  "title": "Outage that won't recover",
+  "difficulty": 3,
+  "estimatedTime": "60–90 min",
+  "summary": "TaxRate was down for 15 seconds. Checkout has been failing ever since, though TaxRate is back.",
+  "alert": "[FIRING] ApiHighErrorRate: more than 1% of API requests are failing (currently ~7 %)",
+  "submit": {
+    "questions": [
+      {
+        "id": "what-keeps",
+        "type": "choice",
+        "prompt": "TaxRate is healthy again. What keeps checkout down?",
+        "choices": [
+          { "id": "retries", "label": "Retries: every failing checkout sends TaxRate more requests than it can answer" },
+          { "id": "still-slow", "label": "TaxRate is still slow after its failover" },
+          { "id": "pool", "label": "The API's database pool is exhausted" },
+          { "id": "dns", "label": "DNS lookups for TaxRate are slow" },
+          { "id": "payflow", "label": "PayFlow is down" }
+        ],
+        "answers": ["b9cbec942ad9eacce0da436865aa0a7eb96238b46dba71e9b2685a1657571b78"]
+      },
+      {
+        "id": "busy-with",
+        "type": "choice",
+        "prompt": "What are TaxRate's workers busy with?",
+        "choices": [
+          { "id": "abandoned", "label": "Quotes for requests the API already gave up on" },
+          { "id": "slow-quotes", "label": "ShopFlow's quotes, just slowly" },
+          { "id": "other-customers", "label": "Other customers' requests" },
+          { "id": "failover", "label": "Its database failover, still in progress" },
+          { "id": "restart", "label": "Restarting after the failover" }
+        ],
+        "answers": ["f5ce29b222eadbc3b40fa45743df6e808082336f3767c8fb3b558f9e28bf843b"]
+      },
+      {
+        "id": "amplification",
+        "type": "choice",
+        "prompt": "While quotes are failing, how many requests to TaxRate can a single checkout cause?",
+        "choices": [
+          { "id": "1", "label": "1" },
+          { "id": "4", "label": "4" },
+          { "id": "16", "label": "16" },
+          { "id": "64", "label": "64" },
+          { "id": "unlimited", "label": "No limit" }
+        ],
+        "answers": ["9b40c975726f21fb2ca5201ac8e55f8b60d2d6140129f942404f620d789e6611"]
+      }
+    ]
+  },
+  "verify": {
+    "warmupSeconds": 15,
+    "durationSeconds": 60,
+    "slos": [
+      {
+        "label": "Checkouts failing once TaxRate is back",
+        "metric": "checkouts_failed{phase:after}",
+        "stat": "rate",
+        "max": 0.01,
+        "unit": "ratio"
+      },
+      {
+        "label": "Requests to TaxRate per second (peak)",
+        "source": "prometheus",
+        "query": "max_over_time(sum(rate(taxrate_requests_received_total[15s]))[$range:5s])",
+        "max": 20,
+        "unit": "count"
+      }
+    ]
+  },
+  "resetServices": ["taxrate"]
+}

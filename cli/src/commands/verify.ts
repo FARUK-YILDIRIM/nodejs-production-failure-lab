@@ -1,8 +1,8 @@
 import { runChecks } from '../lib/checks.ts';
 import { compose, composeOrFail, ensureDocker, runningServices } from '../lib/compose.ts';
 import { ensureRunning, incidentFromArgs } from '../lib/current.ts';
-import { restoreDatabase } from '../lib/database.ts';
 import { deploy } from '../lib/deploy.ts';
+import { resetEnvironment } from '../lib/environment.ts';
 import type { Incident, Slo } from '../lib/incidents.ts';
 import { loadBaseline, measure, RUNTIME_METRICS, saveBaseline, saveRun, type Measurement } from '../lib/measure.ts';
 import { ensureSnapshot, hashTree } from '../lib/source.ts';
@@ -117,7 +117,7 @@ export async function verify(args: string[], flags: { ci: boolean; expectFail: b
     // Every run starts from a fresh deploy of what is on disk: nothing left over from
     // earlier runs (a heap near its limit, an exhausted pool, a hand-made index…).
     log.step('Deploying your working copy…');
-    if (incident.resetDatabase) await restoreDatabase(incident);
+    await resetEnvironment(incident);
     await deploy(incident, { note: 'Deployed working copy (verify)' });
     progress.deployedHash = currentHash;
     saveState(state);
@@ -144,13 +144,13 @@ export async function verify(args: string[], flags: { ci: boolean; expectFail: b
       before = loadBaseline(incident, originalHash);
       if (!before) {
         log.step(`Measuring the original code first (only once, ~${warmupSeconds + durationSeconds + 30}s)…`);
-        if (incident.resetDatabase) await restoreDatabase(incident);
+        await resetEnvironment(incident);
         await deploy(incident, { sourceDir: snapshot, note: 'Deployed original code (baseline)' });
         try {
           before = await measure(incident, 'original', originalHash);
           saveBaseline(incident, before);
         } finally {
-          if (incident.resetDatabase) await restoreDatabase(incident);
+          await resetEnvironment(incident);
           await deploy(incident, { note: 'Deployed working copy (verify)' });
         }
       }

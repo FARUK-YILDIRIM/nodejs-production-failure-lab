@@ -47,6 +47,12 @@ export interface IncidentManifest {
    * from the pristine seeded database, so only changes shipped with the code count.
    */
   resetDatabase?: boolean;
+  /**
+   * Services standing in for other teams' systems that keep state between requests
+   * (queues, caches). `verify` and `reset` restart them, so a run doesn't start
+   * with the leftovers of the previous one.
+   */
+  resetServices?: string[];
 }
 
 export interface Incident extends IncidentManifest {

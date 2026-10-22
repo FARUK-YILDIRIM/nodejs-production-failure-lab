@@ -67,6 +67,8 @@ Write it like a page from on-call: an alert, a message from Support, what you kn
 
 If the fix changes the database, set `"resetDatabase": true`, end the seed with `db/04-template.sh` (copy it from incident 005) and ship the fix as a migration in `app/src/migrations`.
 
+If a stand-in service keeps state that would leak from one run into the next (a queue, a cache), list it in `"resetServices"`: `verify` and `reset` restart it before each run.
+
 ## 5. Functional checks (`checks.ts`)
 
 Every deterministic endpoint gets a golden SHA-256 of its response body, taken from the broken service (it is functionally correct, just slow or fragile):

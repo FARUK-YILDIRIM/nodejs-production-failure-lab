@@ -40,6 +40,8 @@ On first start, the CLI snapshots the original `src/` into `.lab/snapshots/` (fr
 
 Some fixes change the database (an index, a column). Those incidents set `"resetDatabase": true`: their seed ends by copying the database to `shop_pristine` (`db/04-template.sh`), and `verify` and `reset` recreate `shop` from that template in seconds before deploying. The service applies its own SQL migrations from `src/migrations` at startup, so a database fix is part of the code like any other.
 
+Likewise, stand-ins for other teams' services that keep state between requests (a queue still full of work from the last run, for example) are listed in `"resetServices"`, and restarted before every run.
+
 ## Telemetry
 
 | Signal | Producer | Store | Notes |
@@ -57,7 +59,7 @@ The service's instrumentation is loaded with `node --import ./src/telemetry/regi
 
 `./lab verify` runs, in order:
 
-1. **Pause the simulated traffic and deploy** the working copy fresh (for `resetDatabase` incidents, on a restored database). Every run starts from the same state: no heap near its limit, no exhausted pool, no hand-made index left over from earlier.
+1. **Pause the simulated traffic and deploy** the working copy fresh (on a restored database for `resetDatabase` incidents, after restarting the `resetServices`). Every run starts from the same state: no heap near its limit, no exhausted pool, no hand-made index left over from earlier.
 2. **Functional checks** (`checks.ts`): golden SHA-256 hashes of deterministic responses, plus behavioral checks for writes and validation. A fix must not change what the API returns. Checks retry while the API is restarting, and stop early if it stops answering altogether.
 3. **Baseline**, once per original snapshot: deploy the original code, warm up, run the load, collect metrics; then redeploy the working copy. The result is cached in `.lab/runs/`.
 4. **Measurement**: k6 warms up, then runs the standard traffic mix for the incident's duration. Client-side percentiles come from k6's summary; server-side numbers come from Prometheus for exactly that window.

@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        incident: [001-latency-spike, 002-random-restarts, 003-error-bursts, 004-slow-checkout, 005-database-overload, 006-slow-order-history, 007-hanging-requests, 008-flash-sale-timeouts, 009-product-pages-down, 010-duplicate-orders]
+        incident: [001-latency-spike, 002-random-restarts, 003-error-bursts, 004-slow-checkout, 005-database-overload, 006-slow-order-history, 007-hanging-requests, 008-flash-sale-timeouts, 009-product-pages-down, 010-duplicate-orders, 011-outage-that-wont-recover]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
