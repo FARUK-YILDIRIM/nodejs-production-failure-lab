@@ -10,16 +10,21 @@ export type Question =
 /**
  * A service level objective checked by `./lab verify`. By default it is read from
  * the k6 end-of-test summary (client side); `source: "prometheus"` evaluates a
- * PromQL query over exactly the measured window instead.
+ * PromQL query over exactly the measured window instead, and `source: "sql"` runs
+ * a query against the incident's database once the run is over.
  */
 export interface Slo {
   label: string;
-  source?: 'k6' | 'prometheus';
+  source?: 'k6' | 'prometheus' | 'sql';
   /** k6: metric name, optionally with a tag filter: `http_req_duration{journey:catalog}`. */
   metric?: string;
   /** k6: summary stat: `p(95)`, `avg`, `rate`… */
   stat?: string;
-  /** prometheus: PromQL where `$range` stands for the measured window, e.g. `changes(x[$range])`. */
+  /**
+   * prometheus: PromQL where `$range` stands for the measured window, e.g. `changes(x[$range])`.
+   * sql: a query returning one number, where `$start` and `$end` stand for the measured window
+   * as `timestamptz` values, e.g. `SELECT count(*) FROM orders WHERE created_at >= $start`.
+   */
   query?: string;
   max: number;
   unit: 'ms' | 'ratio' | 'count' | 'bytes/s';

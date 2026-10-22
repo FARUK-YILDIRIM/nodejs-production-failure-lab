@@ -1,0 +1,85 @@
+{
+  "id": "010",
+  "title": "Duplicate orders",
+  "difficulty": 2,
+  "estimatedTime": "60–90 min",
+  "summary": "Some customers are charged two, three, four times for one order, while the app tells them checkout failed.",
+  "alert": "[FIRING] DuplicateCharges: PayFlow flagged possible duplicate charges in the last 10 minutes",
+  "submit": {
+    "questions": [
+      {
+        "id": "source",
+        "type": "choice",
+        "prompt": "Where do the extra orders come from?",
+        "choices": [
+          {
+            "id": "app-retries",
+            "label": "The app retries checkouts that take too long, and every attempt places an order"
+          },
+          { "id": "double-tap", "label": "Customers tap the checkout button twice" },
+          { "id": "api-bug", "label": "The API writes each order twice" },
+          { "id": "payflow", "label": "PayFlow charges cards twice on its own" },
+          { "id": "proxy", "label": "The edge proxy retries requests to the API" }
+        ],
+        "answers": ["b13ef6cff2d00dcb9952b93b37b2766b6d5c7ecf7972ca8b731c2a2c2b10412d"]
+      },
+      {
+        "id": "why-new",
+        "type": "choice",
+        "prompt": "Why does a retried checkout become a new order, and a new charge?",
+        "choices": [
+          {
+            "id": "ignores-key",
+            "label": "The API ignores the Idempotency-Key the app sends, and gives PayFlow a new key for every attempt"
+          },
+          { "id": "payflow-ignores", "label": "PayFlow ignores idempotency keys" },
+          { "id": "new-key", "label": "The app sends a new Idempotency-Key with every attempt" },
+          { "id": "no-transaction", "label": "Orders aren't written in a transaction" },
+          { "id": "cache", "label": "The API caches checkout responses" }
+        ],
+        "answers": ["8b71b910ee1b23e857d46b3fbdaa67d9832c42a911c7856fee287def4f14cb46"]
+      },
+      {
+        "id": "who",
+        "type": "choice",
+        "prompt": "Why does it only happen to some customers?",
+        "choices": [
+          { "id": "slow-bank", "label": "Their bank takes longer to authorize the card than the app waits" },
+          { "id": "big-carts", "label": "Their carts are bigger" },
+          { "id": "coupons", "label": "They use coupons" },
+          { "id": "old-app", "label": "They still use an old version of the app" },
+          { "id": "region", "label": "They're far from ShopFlow's data center" }
+        ],
+        "answers": ["81886ebe709de0eae01ee1e7044b46ce3a3de9151b0ed2fcf089c68d5e2fe1dc"]
+      }
+    ]
+  },
+  "verify": {
+    "warmupSeconds": 15,
+    "durationSeconds": 60,
+    "slos": [
+      {
+        "label": "Duplicate orders",
+        "source": "sql",
+        "query": "SELECT count(*) FROM orders o WHERE o.created_at >= $start AND EXISTS (SELECT 1 FROM orders p WHERE p.customer_id = o.customer_id AND p.total_cents = o.total_cents AND p.id < o.id AND p.created_at > o.created_at - interval '1 minute')",
+        "max": 0,
+        "unit": "count"
+      },
+      {
+        "label": "Duplicate card authorizations",
+        "source": "prometheus",
+        "query": "sum(increase(payflow_duplicate_authorizations_total[$range]))",
+        "max": 0,
+        "unit": "count"
+      },
+      {
+        "label": "Checkouts the app gives up on",
+        "metric": "checkouts_failed",
+        "stat": "rate",
+        "max": 0.01,
+        "unit": "ratio"
+      }
+    ]
+  },
+  "resetDatabase": true
+}

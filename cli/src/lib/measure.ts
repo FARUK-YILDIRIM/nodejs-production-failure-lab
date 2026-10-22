@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { composeOrFail } from './compose.ts';
@@ -19,6 +20,8 @@ export type RuntimeMetricId = (typeof RUNTIME_METRICS)[number]['id'];
 export interface Measurement {
   label: string;
   sourceHash: string;
+  /** What was measured (load, durations, SLOs): a baseline is only reused for the same definitions. */
+  verifyHash?: string;
   measuredAt: string;
   durationSeconds: number;
   requests: number;
@@ -75,9 +78,33 @@ async function promQuery(expr: string, at: Date): Promise<number | undefined> {
   }
 }
 
-async function sloValue(slo: Slo, summary: K6Summary, range: string, at: Date): Promise<number | null> {
+async function sqlQuery(incident: Incident, sql: string): Promise<number | undefined> {
+  const result = await composeOrFail(
+    incident,
+    ['exec', '-T', 'postgres', 'psql', '-U', 'shop', '-d', 'shop', '-tAq', '-v', 'ON_ERROR_STOP=1', '-c', sql],
+    'Measuring an SLO in the database',
+  );
+  const value = Number(result.stdout.trim());
+  return result.stdout.trim() !== '' && Number.isFinite(value) ? value : undefined;
+}
+
+interface Window {
+  start: Date;
+  end: Date;
+  /** The window as a PromQL range, e.g. `62s`. */
+  range: string;
+}
+
+async function sloValue(incident: Incident, slo: Slo, summary: K6Summary, window: Window): Promise<number | null> {
   if (slo.source === 'prometheus') {
-    return slo.query ? ((await promQuery(slo.query.replaceAll('$range', range), at)) ?? null) : null;
+    return slo.query ? ((await promQuery(slo.query.replaceAll('$range', window.range), window.end)) ?? null) : null;
+  }
+  if (slo.source === 'sql') {
+    if (!slo.query) return null;
+    const sql = slo.query
+      .replaceAll('$start', `'${window.start.toISOString()}'::timestamptz`)
+      .replaceAll('$end', `'${window.end.toISOString()}'::timestamptz`);
+    return (await sqlQuery(incident, sql)) ?? null;
   }
   const value = slo.metric && slo.stat ? summary.metrics[slo.metric]?.values[slo.stat] : undefined;
   return typeof value === 'number' ? value : null;
@@ -91,14 +118,14 @@ export async function measure(incident: Incident, label: string, sourceHash: str
   const { warmupSeconds, durationSeconds, slos } = incident.verify;
   await k6(incident, 'warmup', warmupSeconds);
 
-  const startedAt = Date.now();
+  const startedAt = new Date();
   const summary = await k6(incident, 'verify', durationSeconds);
   const endedAt = new Date();
   if (!summary) throw new Error('k6 produced no summary');
 
   // Let Prometheus scrape the last seconds of the run.
   await sleep(7_000);
-  const range = `${Math.max(10, Math.round((endedAt.getTime() - startedAt) / 1000))}s`;
+  const range = `${Math.max(10, Math.round((endedAt.getTime() - startedAt.getTime()) / 1000))}s`;
   const runtime: Measurement['runtime'] = {};
   for (const metric of RUNTIME_METRICS) {
     const value = await promQuery(metric.query.replace('$range', range), endedAt);
@@ -106,11 +133,12 @@ export async function measure(incident: Incident, label: string, sourceHash: str
   }
 
   const sloValues: (number | null)[] = [];
-  for (const slo of slos) sloValues.push(await sloValue(slo, summary, range, endedAt));
+  for (const slo of slos) sloValues.push(await sloValue(incident, slo, summary, { start: startedAt, end: endedAt, range }));
 
   return {
     label,
     sourceHash,
+    verifyHash: verifyHash(incident),
     measuredAt: endedAt.toISOString(),
     durationSeconds,
     requests: summary.metrics.http_reqs?.values.count ?? 0,
@@ -121,10 +149,13 @@ export async function measure(incident: Incident, label: string, sourceHash: str
 
 const baselineFile = (incident: Incident) => path.join(runsDir(incident), 'baseline.json');
 
+const verifyHash = (incident: Incident) =>
+  createHash('sha256').update(JSON.stringify(incident.verify)).digest('hex').slice(0, 16);
+
 export function loadBaseline(incident: Incident, sourceHash: string): Measurement | undefined {
   try {
     const baseline = JSON.parse(fs.readFileSync(baselineFile(incident), 'utf8')) as Measurement;
-    return baseline.sourceHash === sourceHash ? baseline : undefined;
+    return baseline.sourceHash === sourceHash && baseline.verifyHash === verifyHash(incident) ? baseline : undefined;
   } catch {
     return undefined;
   }

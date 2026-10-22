@@ -15,7 +15,7 @@ export interface Check {
 
 export interface Api {
   get(path: string): Promise<Response>;
-  post(path: string, body: unknown): Promise<Response>;
+  post(path: string, body: unknown, headers?: Record<string, string>): Promise<Response>;
 }
 
 export class CheckFailure extends Error {
@@ -43,10 +43,10 @@ const TIMEOUT_MS = 15_000;
 
 export const api: Api = {
   get: (url) => fetch(`${urls.api}${url}`, { signal: AbortSignal.timeout(TIMEOUT_MS) }),
-  post: (url, body) =>
+  post: (url, body, headers = {}) =>
     fetch(`${urls.api}${url}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     }),

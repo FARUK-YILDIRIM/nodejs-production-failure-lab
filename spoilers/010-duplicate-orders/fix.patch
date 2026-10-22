@@ -1,0 +1,234 @@
+diff --git a/incidents/010-duplicate-orders/app/src/checkout/payments.ts b/incidents/010-duplicate-orders/app/src/checkout/payments.ts
+index 19fefbc..ca6ddec 100644
+--- a/incidents/010-duplicate-orders/app/src/checkout/payments.ts
++++ b/incidents/010-duplicate-orders/app/src/checkout/payments.ts
+@@ -1,6 +1,6 @@
+ import { config } from '../platform/config.ts';
+ import { callService } from '../platform/http-client.ts';
+-import { paymentRequired } from '../shared/http-errors.ts';
++import { paymentRequired, stillInProgress } from '../shared/http-errors.ts';
+ 
+ export interface Authorization {
+   id: string;
+@@ -25,6 +25,8 @@ export async function authorizePayment(request: {
+     body: JSON.stringify({ amountCents: request.amountCents, currency: 'USD', paymentToken: request.paymentToken }),
+   });
+   if (response.status === 402) throw paymentRequired('the card was declined');
++  // Another attempt with the same idempotency key is still waiting for the card network.
++  if (response.status === 409) throw stillInProgress('this checkout is still being processed');
+   if (!response.ok) throw new Error(`PayFlow responded ${response.status}: ${await response.text()}`);
+   return (await response.json()) as Authorization;
+ }
+diff --git a/incidents/010-duplicate-orders/app/src/migrations/0006_orders_idempotency_key.sql b/incidents/010-duplicate-orders/app/src/migrations/0006_orders_idempotency_key.sql
+new file mode 100644
+index 0000000..e8cff4d
+--- /dev/null
++++ b/incidents/010-duplicate-orders/app/src/migrations/0006_orders_idempotency_key.sql
+@@ -0,0 +1,3 @@
++-- A retried checkout must find the order it already placed: orders remember the
++-- Idempotency-Key the app sent with the checkout that created them.
++ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key text;
+diff --git a/incidents/010-duplicate-orders/app/src/migrations/0007_orders_idempotency_key_index.sql b/incidents/010-duplicate-orders/app/src/migrations/0007_orders_idempotency_key_index.sql
+new file mode 100644
+index 0000000..8a76933
+--- /dev/null
++++ b/incidents/010-duplicate-orders/app/src/migrations/0007_orders_idempotency_key_index.sql
+@@ -0,0 +1,5 @@
++-- no-transaction
++-- One order per customer and Idempotency-Key, even when two attempts of the same
++-- checkout race each other. CONCURRENTLY: orders keep coming in while it's built.
++CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS orders_customer_idempotency_key_idx
++    ON orders (customer_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
+diff --git a/incidents/010-duplicate-orders/app/src/orders/orders.repository.ts b/incidents/010-duplicate-orders/app/src/orders/orders.repository.ts
+index c78609e..3f5067c 100644
+--- a/incidents/010-duplicate-orders/app/src/orders/orders.repository.ts
++++ b/incidents/010-duplicate-orders/app/src/orders/orders.repository.ts
+@@ -125,15 +125,24 @@ export async function insertOrder(
+     discountCents: number;
+     couponCode: string | null;
+     paymentId: string;
++    idempotencyKey: string | null;
+     items: { productId: number; quantity: number; unitPriceCents: number }[];
+   },
+   client: pg.PoolClient,
+ ): Promise<number> {
+   const [inserted] = await query<{ id: number }>(
+     'orders.insert',
+-    `INSERT INTO orders (customer_id, status, total_cents, tax_cents, discount_cents, coupon_code, payment_id)
+-     VALUES ($1, 'paid', $2, $3, $4, $5, $6) RETURNING id`,
+-    [order.customerId, order.totalCents, order.taxCents, order.discountCents, order.couponCode, order.paymentId],
++    `INSERT INTO orders (customer_id, status, total_cents, tax_cents, discount_cents, coupon_code, payment_id, idempotency_key)
++     VALUES ($1, 'paid', $2, $3, $4, $5, $6, $7) RETURNING id`,
++    [
++      order.customerId,
++      order.totalCents,
++      order.taxCents,
++      order.discountCents,
++      order.couponCode,
++      order.paymentId,
++      order.idempotencyKey,
++    ],
+     client,
+   );
+   if (!inserted) throw new Error('INSERT INTO orders returned no row');
+@@ -154,6 +163,16 @@ export async function insertOrder(
+   return inserted.id;
+ }
+ 
++/** The order a customer's checkout with this Idempotency-Key already placed, if any. */
++export async function findOrderIdByIdempotencyKey(customerId: number, idempotencyKey: string): Promise<number | undefined> {
++  const [order] = await query<{ id: number }>(
++    'orders.by-idempotency-key',
++    'SELECT id FROM orders WHERE customer_id = $1 AND idempotency_key = $2',
++    [customerId, idempotencyKey],
++  );
++  return order?.id;
++}
++
+ export interface Coupon {
+   code: string;
+   percentOff: number;
+diff --git a/incidents/010-duplicate-orders/app/src/orders/orders.routes.ts b/incidents/010-duplicate-orders/app/src/orders/orders.routes.ts
+index 9bcc5f3..de837be 100644
+--- a/incidents/010-duplicate-orders/app/src/orders/orders.routes.ts
++++ b/incidents/010-duplicate-orders/app/src/orders/orders.routes.ts
+@@ -1,15 +1,23 @@
+ import express from 'express';
+-import { notFound } from '../shared/http-errors.ts';
++import { badRequest, notFound } from '../shared/http-errors.ts';
+ import { positiveInt } from '../shared/validation.ts';
+ import { getOrder, parseNewOrder, placeOrder } from './orders.service.ts';
+ 
+ export const ordersRouter = express.Router();
+ 
+ ordersRouter.post('/', async (req, res) => {
+-  const order = await placeOrder(parseNewOrder(req.body));
++  const order = await placeOrder(parseNewOrder(req.body), idempotencyKey(req));
+   res.status(201).location(`/api/orders/${order.id}`).json(order);
+ });
+ 
++/** The app sends the same Idempotency-Key with every attempt of a checkout. */
++function idempotencyKey(req: express.Request): string | undefined {
++  const key = req.get('Idempotency-Key');
++  if (key === undefined) return undefined;
++  if (!/^[\w-]{8,128}$/.test(key)) throw badRequest('Idempotency-Key must be 8 to 128 letters, digits, "-" or "_"');
++  return key;
++}
++
+ ordersRouter.get('/:id', async (req, res) => {
+   const order = await getOrder(positiveInt(req.params.id, 'id'));
+   if (!order) throw notFound('order');
+diff --git a/incidents/010-duplicate-orders/app/src/orders/orders.service.ts b/incidents/010-duplicate-orders/app/src/orders/orders.service.ts
+index 18aa2c6..3708206 100644
+--- a/incidents/010-duplicate-orders/app/src/orders/orders.service.ts
++++ b/incidents/010-duplicate-orders/app/src/orders/orders.service.ts
+@@ -13,6 +13,7 @@ import {
+   findCoupon,
+   findCustomer,
+   findOrder,
++  findOrderIdByIdempotencyKey,
+   findPrices,
+   insertOrder,
+   listOrderItems,
+@@ -69,7 +70,16 @@ export function parseNewOrder(body: unknown): NewOrder {
+   };
+ }
+ 
+-export async function placeOrder(input: NewOrder) {
++/**
++ * Places an order. The app sends the same `idempotencyKey` with every attempt of a
++ * checkout, so an attempt whose order already exists gets that order back.
++ */
++export async function placeOrder(input: NewOrder, idempotencyKey?: string) {
++  if (idempotencyKey) {
++    const placed = await findOrderIdByIdempotencyKey(input.customerId, idempotencyKey);
++    if (placed !== undefined) return existingOrder(placed);
++  }
++
+   const customer = await findCustomer(input.customerId);
+   if (!customer) throw notFound('customer');
+ 
+@@ -97,7 +107,9 @@ export async function placeOrder(input: NewOrder) {
+   const authorization = await authorizePayment({
+     amountCents: totalCents,
+     paymentToken: input.paymentToken,
+-    idempotencyKey: randomUUID(),
++    // Every attempt of a checkout uses the same key at PayFlow, which answers a retry
++    // with the first authorization instead of putting a second hold on the card.
++    idempotencyKey: idempotencyKey ? `order-${input.customerId}-${idempotencyKey}` : randomUUID(),
+   });
+ 
+   let orderId: number;
+@@ -122,12 +134,19 @@ export async function placeOrder(input: NewOrder) {
+           discountCents,
+           couponCode: input.couponCode ?? null,
+           paymentId: authorization.id,
++          idempotencyKey: idempotencyKey ?? null,
+           items,
+         },
+         client,
+       );
+     });
+   } catch (err) {
++    // Another attempt of this checkout wrote its order first (the unique index stopped
++    // this one): answer with that order. It holds this same authorization, so keep it.
++    if (idempotencyKey) {
++      const placed = await findOrderIdByIdempotencyKey(input.customerId, idempotencyKey);
++      if (placed !== undefined) return existingOrder(placed);
++    }
+     // Nothing was sold: release the hold on the customer's card.
+     await voidPayment(authorization.id).catch((voidErr: unknown) =>
+       logger.error({ err: voidErr, authorizationId: authorization.id }, 'could not void the card authorization'),
+@@ -148,6 +167,12 @@ export async function placeOrder(input: NewOrder) {
+   return order;
+ }
+ 
++async function existingOrder(id: number) {
++  const order = await getOrder(id);
++  if (!order) throw new Error(`order ${id} vanished`);
++  return order;
++}
++
+ function isRedeemable(coupon: Coupon): boolean {
+   if (coupon.expiresAt <= new Date()) return false;
+   return coupon.maxRedemptions === null || coupon.redemptions < coupon.maxRedemptions;
+diff --git a/incidents/010-duplicate-orders/app/src/platform/error-handler.ts b/incidents/010-duplicate-orders/app/src/platform/error-handler.ts
+index 2c98080..db74aad 100644
+--- a/incidents/010-duplicate-orders/app/src/platform/error-handler.ts
++++ b/incidents/010-duplicate-orders/app/src/platform/error-handler.ts
+@@ -8,7 +8,7 @@ export const notFoundHandler: RequestHandler = (req, res) => {
+ 
+ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
+   if (err instanceof HttpError) {
+-    res.status(err.status).json({ error: { code: err.code, message: err.message } });
++    res.status(err.status).set(err.headers).json({ error: { code: err.code, message: err.message } });
+     return;
+   }
+   // Malformed JSON body, rejected by express.json().
+diff --git a/incidents/010-duplicate-orders/app/src/shared/http-errors.ts b/incidents/010-duplicate-orders/app/src/shared/http-errors.ts
+index 9a39c24..61b8d03 100644
+--- a/incidents/010-duplicate-orders/app/src/shared/http-errors.ts
++++ b/incidents/010-duplicate-orders/app/src/shared/http-errors.ts
+@@ -1,12 +1,14 @@
+ export class HttpError extends Error {
+   readonly status: number;
+   readonly code: string;
++  readonly headers: Record<string, string>;
+ 
+-  constructor(status: number, code: string, message: string) {
++  constructor(status: number, code: string, message: string, headers: Record<string, string> = {}) {
+     super(message);
+     this.name = 'HttpError';
+     this.status = status;
+     this.code = code;
++    this.headers = headers;
+   }
+ }
+ 
+@@ -17,3 +19,6 @@ export const notFound = (resource: string) => new HttpError(404, 'not_found', `$
+ export const paymentRequired = (message: string) => new HttpError(402, 'payment_declined', message);
+ 
+ export const conflict = (message: string) => new HttpError(409, 'conflict', message);
++
++/** The same request is still being processed: the client should try again in a moment. */
++export const stillInProgress = (message: string) => new HttpError(409, 'in_progress', message, { 'Retry-After': '1' });

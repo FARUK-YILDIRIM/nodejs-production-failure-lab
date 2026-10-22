@@ -55,6 +55,14 @@ Write it like a page from on-call: an alert, a message from Support, what you kn
   { "label": "Restarts", "source": "prometheus", "query": "changes(process_start_time_seconds{job=\"api\"}[$range])", "max": 0, "unit": "count" }
   ```
 
+  Facts only the database knows (duplicate rows, lost updates) use `"source": "sql"` and a query returning one number, where `$start` and `$end` are the measured window as `timestamptz`:
+
+  ```json
+  { "label": "Duplicate orders", "source": "sql", "query": "SELECT count(*) FROM orders WHERE created_at >= $start AND …", "max": 0, "unit": "count" }
+  ```
+
+  `max` is inclusive: `"max": 0` with `"unit": "count"` reads as "= 0".
+
   Choose targets the broken code clearly misses and the reference fix clearly meets, with margin on both sides: measure each a few times. Lengthen `warmupSeconds`/`durationSeconds` when a signal needs time to settle (caches filling up, memory trends).
 
 If the fix changes the database, set `"resetDatabase": true`, end the seed with `db/04-template.sh` (copy it from incident 005) and ship the fix as a migration in `app/src/migrations`.

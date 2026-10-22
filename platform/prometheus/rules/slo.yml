@@ -40,6 +40,16 @@ groups:
           summary: "Clients give up on more than 1% of API requests before getting an answer (HTTP 499)"
           description: "Abandoned ratio = {{ $value | humanizePercentage }} over the last 2 minutes."
 
+      # PayFlow's risk engine flags a hold on a card for the same amount as another
+      # one still active on it: what customers see as being charged twice.
+      - alert: DuplicateCharges
+        expr: sum(increase(payflow_duplicate_authorizations_total[10m])) > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "PayFlow flagged possible duplicate charges in the last 10 minutes"
+          description: "{{ $value | humanize }} card authorizations look like duplicates of another active one."
+
       - alert: ApiDown
         expr: up{job="api"} == 0
         for: 1m
