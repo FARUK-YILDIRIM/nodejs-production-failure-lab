@@ -1,0 +1,75 @@
+{
+  "id": "009",
+  "title": "Product pages down",
+  "difficulty": 2,
+  "estimatedTime": "45–75 min",
+  "summary": "Product pages time out, while the rest of the site works fine.",
+  "alert": "[FIRING] ClientsGivingUp: clients give up on more than 1% of API requests before getting an answer (currently ~34 %)",
+  "submit": {
+    "questions": [
+      {
+        "id": "waiting",
+        "type": "choice",
+        "prompt": "What are product pages waiting for?",
+        "choices": [
+          { "id": "recommendations", "label": "The Recommendations service" },
+          { "id": "database", "label": "The database" },
+          { "id": "pool", "label": "A connection from the database pool" },
+          { "id": "event-loop", "label": "The API's event loop" },
+          { "id": "dns", "label": "DNS lookups" }
+        ],
+        "answers": ["199ece8aa049c4b28c828d668424559708447ba5fcb72bee838f5c08a6280d0b"]
+      },
+      {
+        "id": "why-slow",
+        "type": "choice",
+        "prompt": "Recommendations computes most answers in under 40 ms. Why do they all take seconds?",
+        "choices": [
+          {
+            "id": "few-slow",
+            "label": "A few slow requests keep all its workers busy, and every other request queues behind them"
+          },
+          { "id": "too-many", "label": "Product pages send it more requests than it can handle" },
+          { "id": "network", "label": "The network between the API and Recommendations is slow" },
+          { "id": "model", "label": "The new model is slower for every product" },
+          { "id": "connections", "label": "The API runs out of connections to Recommendations" }
+        ],
+        "answers": ["661774012d87dcc6c3d4e3797225d787f265bb1821f4c951098dab16f608592d"]
+      },
+      {
+        "id": "why-down",
+        "type": "choice",
+        "prompt": "Why does a problem with recommendations take product pages down?",
+        "choices": [
+          { "id": "no-fallback", "label": "The page waits up to 30 s for them, and fails without them" },
+          { "id": "retries", "label": "The API retries failed calls and multiplies the load" },
+          { "id": "cache", "label": "Failed pages are cached" },
+          { "id": "crawler", "label": "Googlebot crawls too fast" },
+          { "id": "pool-size", "label": "The API has too few connections to Recommendations" }
+        ],
+        "answers": ["04c26663f770e3ecaab7828cc55f45b5b335f1468cd59229f9320d65862e0308"]
+      }
+    ]
+  },
+  "verify": {
+    "warmupSeconds": 15,
+    "durationSeconds": 60,
+    "slos": [
+      {
+        "label": "Product pages p95",
+        "metric": "http_req_duration{journey:crawler}",
+        "stat": "p(95)",
+        "max": 500,
+        "unit": "ms"
+      },
+      { "label": "Error rate", "metric": "http_req_failed", "stat": "rate", "max": 0.005, "unit": "ratio" },
+      {
+        "label": "Product pages without recommendations",
+        "metric": "product_pages_without_recommendations",
+        "stat": "rate",
+        "max": 0.15,
+        "unit": "ratio"
+      }
+    ]
+  }
+}

@@ -1,0 +1,84 @@
+diff --git a/incidents/009-product-pages-down/app/src/catalog/catalog.routes.ts b/incidents/009-product-pages-down/app/src/catalog/catalog.routes.ts
+index 05a268f..a7a90ce 100644
+--- a/incidents/009-product-pages-down/app/src/catalog/catalog.routes.ts
++++ b/incidents/009-product-pages-down/app/src/catalog/catalog.routes.ts
+@@ -10,6 +10,7 @@ import {
+   listCategories,
+   listProducts,
+   listProductsByIds,
++  listRelatedProducts,
+   type Product,
+ } from './catalog.repository.ts';
+ import { productImages } from './images.ts';
+@@ -56,9 +57,10 @@ catalogRouter.get('/products/:id', cacheResponses({ ttlMs: CATALOG_TTL_MS }), as
+   const product = await findProduct(positiveInt(req.params.id, 'id'));
+   if (!product) throw notFound('product');
+ 
+-  // "Customers also bought", from the data team's Recommendations service.
++  // "Customers also bought", from the data team's Recommendations service. Without
++  // an answer in time, the page shows more products from the same category instead.
+   const [relatedIds, purchases] = await Promise.all([customersAlsoBought(product.id, 4), countPurchases(product.id)]);
+-  const related = await listProductsByIds(relatedIds);
++  const related = relatedIds ? await listProductsByIds(relatedIds) : await listRelatedProducts(product);
+   res.json({
+     ...toCard(product),
+     categoryName: product.category,
+diff --git a/incidents/009-product-pages-down/app/src/catalog/recommendations.ts b/incidents/009-product-pages-down/app/src/catalog/recommendations.ts
+index 56c61ee..48b13b0 100644
+--- a/incidents/009-product-pages-down/app/src/catalog/recommendations.ts
++++ b/incidents/009-product-pages-down/app/src/catalog/recommendations.ts
+@@ -1,17 +1,42 @@
++import { Counter } from 'prom-client';
+ import { config } from '../platform/config.ts';
+ import { callService } from '../platform/http-client.ts';
++import { logger } from '../platform/logger.ts';
++import { registry } from '../telemetry/metrics.ts';
+ 
+-// Generous on purpose: the data team's dashboard shows an inference p99 under 40 ms.
+-const TIMEOUT_MS = 30_000;
++// Recommendations are a nice-to-have: a product page must never wait long for them.
++// Healthy, the service answers in ~20 ms; after 250 ms the page goes on without it.
++const TIMEOUT_MS = 250;
+ 
+-/** "Customers also bought": product ids from the Recommendations service, best match first. */
+-export async function customersAlsoBought(productId: number, limit: number): Promise<number[]> {
+-  const response = await callService(
+-    'recommendations',
+-    `${config.recommendationsUrl}/v1/products/${productId}/recommendations?limit=${limit}`,
+-    { signal: AbortSignal.timeout(TIMEOUT_MS) },
+-  );
+-  if (!response.ok) throw new Error(`Recommendations answered ${response.status}`);
+-  const { items } = (await response.json()) as { items: { productId: number }[] };
+-  return items.map((item) => item.productId);
++const fallbacks = new Counter({
++  name: 'recommendations_fallbacks_total',
++  help: 'Product pages shown without "Customers also bought", because Recommendations failed or was too slow.',
++  labelNames: ['reason'] as const,
++  registers: [registry],
++});
++
++/**
++ * "Customers also bought": product ids from the Recommendations service, best match
++ * first, or `undefined` if it doesn't answer in time.
++ */
++export async function customersAlsoBought(productId: number, limit: number): Promise<number[] | undefined> {
++  try {
++    // The signal aborts the request itself, not just our wait for it: the connection
++    // closes, and Recommendations stops working on a request nobody needs anymore.
++    const response = await callService(
++      'recommendations',
++      `${config.recommendationsUrl}/v1/products/${productId}/recommendations?limit=${limit}`,
++      { signal: AbortSignal.timeout(TIMEOUT_MS) },
++    );
++    if (!response.ok) {
++      await response.body?.cancel();
++      throw new Error(`Recommendations answered ${response.status}`);
++    }
++    const { items } = (await response.json()) as { items: { productId: number }[] };
++    return items.map((item) => item.productId);
++  } catch (err) {
++    fallbacks.inc({ reason: err instanceof Error && err.name === 'TimeoutError' ? 'timeout' : 'error' });
++    logger.debug({ err, productId }, 'no recommendations, showing the page without them');
++    return undefined;
++  }
+ }

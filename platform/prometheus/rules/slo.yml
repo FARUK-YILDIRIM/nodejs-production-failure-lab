@@ -27,6 +27,19 @@ groups:
           summary: "More than 1% of API requests are failing"
           description: "Error ratio = {{ $value | humanizePercentage }} over the last 2 minutes."
 
+      # Requests clients gave up on before getting an answer (HTTP 499 at the edge).
+      # A hanging API produces no errors at all, only clients that stop waiting.
+      - alert: ClientsGivingUp
+        expr: |
+          sum(rate(traefik_service_requests_total{service="api@file", code="499"}[2m]))
+            / sum(rate(traefik_service_requests_total{service="api@file"}[2m])) > 0.01
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: "Clients give up on more than 1% of API requests before getting an answer (HTTP 499)"
+          description: "Abandoned ratio = {{ $value | humanizePercentage }} over the last 2 minutes."
+
       - alert: ApiDown
         expr: up{job="api"} == 0
         for: 1m

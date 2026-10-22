@@ -54,7 +54,8 @@ Optional, for editor IntelliSense in the service code: `npm install` in the inci
 | 006 | [Slow order history](incidents/006-slow-order-history/README.md) | ★☆☆ | ✅ playable |
 | 007 | [Hanging requests](incidents/007-hanging-requests/README.md) | ★★☆ | ✅ playable |
 | 008 | [Flash sale timeouts](incidents/008-flash-sale-timeouts/README.md) | ★★★ | ✅ playable |
-| 009 | Product pages down | ★★☆ | 🛠 next |
+| 009 | [Product pages down](incidents/009-product-pages-down/README.md) | ★★☆ | ✅ playable |
+| 010 | Duplicate orders | ★★☆ | 🛠 next |
 
 Incidents are named after their **symptoms**, never their causes, and difficulty doesn't tell you the category: real incidents don't arrive labeled "database problem". The longer roadmap covers the Node.js runtime, PostgreSQL, distributed systems (timeouts, retries, circuit breakers), messaging and Kafka, and platform limits.
 
