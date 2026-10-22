@@ -23,6 +23,8 @@ incidents/00N-<symptom>/       # name it after the symptom, never the cause
 ├── app/                       # start from the latest incident's app with its fix applied
 ├── db/
 ├── load/load.ts
+├── services/                  # optional: third-party stand-ins (an email provider, a tax API)
+│                              # and infrastructure (a slow DNS resolver, network latency)
 └── checks.ts
 spoilers/00N-<symptom>/
 ├── hints/1.md 2.md 3.md

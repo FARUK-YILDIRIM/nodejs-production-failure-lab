@@ -1,0 +1,69 @@
+{
+  "id": "006",
+  "title": "Slow order history",
+  "difficulty": 1,
+  "estimatedTime": "30–45 min",
+  "summary": "The new \"My orders\" screen takes up to a second to load; everything else is fine.",
+  "alert": "[FIRING] OrderHistorySlow: p95 of GET /api/customers/:id/orders is above 300 ms",
+  "submit": {
+    "questions": [
+      {
+        "id": "endpoint",
+        "type": "endpoint",
+        "prompt": "Which endpoint is slow?",
+        "hint": "e.g. GET /api/things/:id",
+        "answers": [
+          "42fe26ce2020cf283a3beea0cdb73e9a1ea608e40d217b37a898aa99b644858c",
+          "73cd8572b92befe46ca58f8039e1d28c46d07a46270c3eaf1b9b9d779298da1a"
+        ]
+      },
+      {
+        "id": "cause",
+        "type": "choice",
+        "prompt": "What makes it slow?",
+        "choices": [
+          { "id": "n-plus-one", "label": "It runs one query per order and per item, one after another" },
+          { "id": "slow-query", "label": "One of its queries is slow and needs an index" },
+          { "id": "serialization", "label": "Its response is too big to serialize quickly" },
+          { "id": "pool", "label": "It waits for a free database connection" },
+          { "id": "locks", "label": "Its queries wait on locks held by checkout" }
+        ],
+        "answers": ["491a6c9cab4dc5b0b0376826ab172b8cd9f29a45721f107305f176da885f36da"]
+      },
+      {
+        "id": "cost",
+        "type": "choice",
+        "prompt": "Where does most of each query's time go?",
+        "choices": [
+          { "id": "network", "label": "The network round trip to the database" },
+          { "id": "execution", "label": "Executing the query inside PostgreSQL" },
+          { "id": "parsing", "label": "Parsing rows in the API" },
+          { "id": "planning", "label": "Query planning" },
+          { "id": "disk", "label": "Reading from disk" }
+        ],
+        "answers": ["cda69c491d9cb89dec51ba0a8f8a50a98c14e11c16e4fac3f19e4be673ca1ff5"]
+      }
+    ]
+  },
+  "verify": {
+    "warmupSeconds": 15,
+    "durationSeconds": 60,
+    "slos": [
+      {
+        "label": "Account p95",
+        "metric": "http_req_duration{journey:account}",
+        "stat": "p(95)",
+        "max": 300,
+        "unit": "ms"
+      },
+      {
+        "label": "Catalog p95",
+        "metric": "http_req_duration{journey:catalog}",
+        "stat": "p(95)",
+        "max": 250,
+        "unit": "ms"
+      },
+      { "label": "Error rate", "metric": "http_req_failed", "stat": "rate", "max": 0.005, "unit": "ratio" }
+    ]
+  }
+}

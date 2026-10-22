@@ -18,6 +18,8 @@ export function normalizeAnswer(question: Question, raw: string): string {
           .split('?', 1)[0]!
           .replace(/\/+$/, '')
           .replace(/^(?!\/)/, '/')
+          // "/customers/42/orders", "/customers/:customerId/orders", "/customers/{id}/orders"…
+          .replace(/\/(\d+|:[\w-]+|\{[\w-]+\}|<[\w-]+>)(?=\/|$)/g, '/:id')
       );
     case 'text':
       return value.replace(/\(\)$/, '').replace(/\s+/g, ' ');

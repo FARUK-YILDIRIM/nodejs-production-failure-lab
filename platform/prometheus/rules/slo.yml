@@ -58,3 +58,14 @@ groups:
           severity: page
         annotations:
           summary: "PostgreSQL has spent more than 2 s per second executing queries for 2 minutes"
+
+      - alert: OrderHistorySlow
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_server_request_duration_seconds_bucket{job="api", route="/api/customers/:id/orders"}[2m]))
+          ) > 0.3
+        for: 2m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "p95 of GET /api/customers/:id/orders is above 300 ms"

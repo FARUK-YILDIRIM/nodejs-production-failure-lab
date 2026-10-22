@@ -1,0 +1,85 @@
+diff --git a/incidents/006-slow-order-history/app/src/customers/order-history.ts b/incidents/006-slow-order-history/app/src/customers/order-history.ts
+index 07db0b8..57b4356 100644
+--- a/incidents/006-slow-order-history/app/src/customers/order-history.ts
++++ b/incidents/006-slow-order-history/app/src/customers/order-history.ts
+@@ -1,29 +1,27 @@
+-import { findProduct } from '../catalog/catalog.repository.ts';
+ import { productImages } from '../catalog/images.ts';
+-import { listCustomerOrders, listOrderItems } from '../orders/orders.repository.ts';
++import { listCustomerOrders, listItemsForOrders } from '../orders/orders.repository.ts';
+ import { formatMoney } from '../shared/money.ts';
+ 
+-/** "My orders": recent orders with their line items, each with its product image and category. */
++/**
++ * "My orders": recent orders with their line items, each with its product image and category.
++ * Two queries whatever the number of orders and items: every query costs a network
++ * round trip to the database, so they must not grow with the size of the page.
++ */
+ export async function orderHistory(customerId: number, limit: number) {
+   const orders = await listCustomerOrders(customerId, limit);
++  const items = Map.groupBy(await listItemsForOrders(orders.map((order) => order.id)), (item) => item.orderId);
+ 
+-  const history = [];
+-  for (const order of orders) {
+-    const items = await listOrderItems(order.id);
+-    const lines = [];
+-    for (const item of items) {
+-      const product = await findProduct(item.productId);
+-      lines.push({
+-        productId: item.productId,
+-        sku: item.sku,
+-        name: item.name,
+-        quantity: item.quantity,
+-        unitPrice: formatMoney(item.unitPriceCents),
+-        image: product ? productImages(product.sku)[0] : null,
+-        category: product?.categorySlug ?? null,
+-      });
+-    }
+-    history.push({ ...order, total: formatMoney(order.totalCents), items: lines });
+-  }
+-  return history;
++  return orders.map((order) => ({
++    ...order,
++    total: formatMoney(order.totalCents),
++    items: (items.get(order.id) ?? []).map((item) => ({
++      productId: item.productId,
++      sku: item.sku,
++      name: item.name,
++      quantity: item.quantity,
++      unitPrice: formatMoney(item.unitPriceCents),
++      image: productImages(item.sku)[0] ?? null,
++      category: item.categorySlug,
++    })),
++  }));
+ }
+diff --git a/incidents/006-slow-order-history/app/src/orders/orders.repository.ts b/incidents/006-slow-order-history/app/src/orders/orders.repository.ts
+index 96e4871..210eeb0 100644
+--- a/incidents/006-slow-order-history/app/src/orders/orders.repository.ts
++++ b/incidents/006-slow-order-history/app/src/orders/orders.repository.ts
+@@ -51,6 +51,26 @@ export function listOrderItems(orderId: number, client?: pg.PoolClient): Promise
+   );
+ }
+ 
++export interface HistoryItem extends OrderItem {
++  orderId: number;
++  categorySlug: string;
++}
++
++/** The line items of several orders at once, with their product's category. */
++export function listItemsForOrders(orderIds: number[]): Promise<HistoryItem[]> {
++  return query<HistoryItem>(
++    'orders.items-for-orders',
++    `SELECT i.order_id AS "orderId", i.product_id AS "productId", p.sku, p.name, i.quantity,
++            i.unit_price_cents AS "unitPriceCents", c.slug AS "categorySlug"
++       FROM order_items i
++       JOIN products p ON p.id = i.product_id
++       JOIN categories c ON c.id = p.category_id
++      WHERE i.order_id = ANY($1::int[])
++      ORDER BY i.order_id, i.id`,
++    [orderIds],
++  );
++}
++
+ export function listCustomerOrders(customerId: number, limit: number): Promise<OrderSummary[]> {
+   return query<OrderSummary>(
+     'orders.by-customer',
