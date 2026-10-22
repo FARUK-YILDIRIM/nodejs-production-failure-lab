@@ -3,7 +3,7 @@ import fs from 'node:fs';
 const out = new URL('../platform/grafana/dashboards/service-overview.json', import.meta.url);
 const PROM = { type: 'prometheus', uid: 'prometheus' };
 const PG = { type: 'grafana-postgresql-datasource', uid: 'postgres' };
-const EDGE = 'service="api@file"';
+const EDGE = 'entrypoint="web"';
 let id = 0, y = 0;
 const panels = [];
 const row = (title) => { panels.push({ type: 'row', title, id: ++id, collapsed: false, gridPos: { h: 1, w: 24, x: 0, y }, panels: [] }); y += 1; };
@@ -27,19 +27,19 @@ const stat = (title, description, expr, { w = 6, x = 0, h = 4, unit = 'short', t
 };
 
 row('Customer experience (measured at the edge proxy)');
-stat('p95 latency (5m)', 'What 95% of customers experience, measured by Traefik in front of the API.', `histogram_quantile(0.95, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{${EDGE}}[5m])))`, { x: 0, w: 5, unit: 's', thresholds: [{ color: 'green', value: null }, { color: 'orange', value: 0.25 }, { color: 'red', value: 0.5 }] });
-stat('Requests per second', 'Traffic reaching the API through the edge proxy.', `sum(rate(traefik_service_requests_total{${EDGE}}[1m]))`, { x: 5, w: 5, unit: 'reqps', thresholds: [{ color: 'blue', value: null }] });
-stat('Error rate (5xx, 5m)', 'Share of requests answered with a 5xx status.', `(sum(rate(traefik_service_requests_total{${EDGE},code=~"5.."}[5m])) or vector(0)) / sum(rate(traefik_service_requests_total{${EDGE}}[5m]))`, { x: 10, w: 5, unit: 'percentunit', thresholds: [{ color: 'green', value: null }, { color: 'red', value: 0.01 }] });
+stat('p95 latency (5m)', 'What 95% of customers experience, measured by Traefik in front of the API.', `histogram_quantile(0.95, sum by (le) (rate(traefik_entrypoint_request_duration_seconds_bucket{${EDGE}}[5m])))`, { x: 0, w: 5, unit: 's', thresholds: [{ color: 'green', value: null }, { color: 'orange', value: 0.25 }, { color: 'red', value: 0.5 }] });
+stat('Requests per second', 'Traffic reaching the API through the edge proxy.', `sum(rate(traefik_entrypoint_requests_total{${EDGE}}[1m]))`, { x: 5, w: 5, unit: 'reqps', thresholds: [{ color: 'blue', value: null }] });
+stat('Error rate (5xx, 5m)', 'Share of requests answered with a 5xx status.', `(sum(rate(traefik_entrypoint_requests_total{${EDGE},code=~"5.."}[5m])) or vector(0)) / sum(rate(traefik_entrypoint_requests_total{${EDGE}}[5m]))`, { x: 10, w: 5, unit: 'percentunit', thresholds: [{ color: 'green', value: null }, { color: 'red', value: 0.01 }] });
 stat('API restarts (1h)', 'How many times the API process started in the last hour (deploys included).', 'max(changes(process_start_time_seconds{job="api"}[1h])) or vector(0)', { x: 15, w: 5, thresholds: [{ color: 'green', value: null }, { color: 'orange', value: 2 }, { color: 'red', value: 4 }] });
 stat('Firing alerts', 'Prometheus alerts currently firing (see Prometheus → Alerts).', 'count(ALERTS{alertstate="firing"}) or vector(0)', { x: 20, w: 4, thresholds: [{ color: 'green', value: null }, { color: 'red', value: 1 }] });
 y += 4;
 ts('Latency at the edge', 'Request duration percentiles as seen by Traefik, i.e. by customers.', [
-  [`histogram_quantile(0.50, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{${EDGE}}[$__rate_interval])))`, 'p50'],
-  [`histogram_quantile(0.95, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{${EDGE}}[$__rate_interval])))`, 'p95'],
-  [`histogram_quantile(0.99, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{${EDGE}}[$__rate_interval])))`, 'p99'],
+  [`histogram_quantile(0.50, sum by (le) (rate(traefik_entrypoint_request_duration_seconds_bucket{${EDGE}}[$__rate_interval])))`, 'p50'],
+  [`histogram_quantile(0.95, sum by (le) (rate(traefik_entrypoint_request_duration_seconds_bucket{${EDGE}}[$__rate_interval])))`, 'p95'],
+  [`histogram_quantile(0.99, sum by (le) (rate(traefik_entrypoint_request_duration_seconds_bucket{${EDGE}}[$__rate_interval])))`, 'p99'],
 ], { unit: 's', newRow: false });
 ts('Requests per second by status', 'Traffic at the edge, split by HTTP status code.', [
-  [`sum by (code) (rate(traefik_service_requests_total{${EDGE}}[$__rate_interval]))`, '{{code}}'],
+  [`sum by (code) (rate(traefik_entrypoint_requests_total{${EDGE}}[$__rate_interval]))`, '{{code}}'],
 ], { x: 12, unit: 'reqps', stack: true });
 
 row('Inside the API (measured by the service itself)');

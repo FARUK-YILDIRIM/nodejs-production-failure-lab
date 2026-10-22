@@ -7,7 +7,7 @@ groups:
       - alert: ApiHighLatencyP95
         expr: |
           histogram_quantile(0.95,
-            sum by (le) (rate(traefik_service_request_duration_seconds_bucket{service="api@file", method="GET"}[2m]))
+            sum by (le) (rate(traefik_entrypoint_request_duration_seconds_bucket{entrypoint="web", method="GET"}[2m]))
           ) > 0.5
         for: 2m
         labels:
@@ -18,8 +18,8 @@ groups:
 
       - alert: ApiHighErrorRate
         expr: |
-          sum(rate(traefik_service_requests_total{service="api@file", code=~"5.."}[2m]))
-            / sum(rate(traefik_service_requests_total{service="api@file"}[2m])) > 0.01
+          sum(rate(traefik_entrypoint_requests_total{entrypoint="web", code=~"5.."}[2m]))
+            / sum(rate(traefik_entrypoint_requests_total{entrypoint="web"}[2m])) > 0.01
         for: 2m
         labels:
           severity: page
@@ -31,8 +31,8 @@ groups:
       # A hanging API produces no errors at all, only clients that stop waiting.
       - alert: ClientsGivingUp
         expr: |
-          sum(rate(traefik_service_requests_total{service="api@file", code="499"}[2m]))
-            / sum(rate(traefik_service_requests_total{service="api@file"}[2m])) > 0.01
+          sum(rate(traefik_entrypoint_requests_total{entrypoint="web", code="499"}[2m]))
+            / sum(rate(traefik_entrypoint_requests_total{entrypoint="web"}[2m])) > 0.01
         for: 2m
         labels:
           severity: page

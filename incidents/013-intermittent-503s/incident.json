@@ -1,0 +1,72 @@
+{
+  "id": "013",
+  "title": "Intermittent 503s",
+  "difficulty": 2,
+  "estimatedTime": "45–60 min",
+  "summary": "A few times an hour, every page of the site answers 503 for ten seconds or so, then everything is fine again.",
+  "alert": "[FLAPPING] Uptime monitor: the site answered 503, then recovered 12 s later (4 times in the last hour)",
+  "submit": {
+    "questions": [
+      {
+        "id": "who-answers",
+        "type": "choice",
+        "prompt": "Who answers the 503s?",
+        "choices": [
+          { "id": "proxy", "label": "The edge proxy, because no instance passes its readiness check" },
+          { "id": "api", "label": "The API instances, from their error handler" },
+          { "id": "taxrate", "label": "TaxRate" },
+          { "id": "postgres", "label": "PostgreSQL, out of connections" },
+          { "id": "docker", "label": "Docker, while it restarts the instances" }
+        ],
+        "answers": ["fd07c16d6b02a6dd58bb962e2d2983d546b8bcb34888971d5b694ab71fbb7543"]
+      },
+      {
+        "id": "why-both",
+        "type": "choice",
+        "prompt": "Why do both instances fail their readiness check at the same time?",
+        "choices": [
+          {
+            "id": "shared-dependency",
+            "label": "Their readiness depends on TaxRate, which they share: when TaxRate is degraded, both fail it together"
+          },
+          { "id": "restart", "label": "They restart at the same time" },
+          { "id": "database", "label": "The database is overloaded" },
+          { "id": "event-loop", "label": "Their event loops are blocked" },
+          { "id": "check-timeout", "label": "The proxy's check times out" }
+        ],
+        "answers": ["1d2c35327018af8dbfe308f4544034525d9d34b0d620f9453550f2ecdc5eff55"]
+      },
+      {
+        "id": "readiness",
+        "type": "choice",
+        "prompt": "What should an instance's readiness depend on?",
+        "choices": [
+          {
+            "id": "own-needs",
+            "label": "Only on what it needs to serve requests at all: a dependency's trouble should fail the requests that use it"
+          },
+          { "id": "everything", "label": "Every dependency it calls" },
+          { "id": "nothing", "label": "Nothing: always ready" },
+          { "id": "checkout", "label": "TaxRate and PayFlow, since checkout needs them" },
+          { "id": "fast", "label": "Whatever the proxy's check has time for" }
+        ],
+        "answers": ["80f1560f495956f2e43bfb54af7931c0e82e7ab1f228a30f04cab0315c502e27"]
+      }
+    ]
+  },
+  "verify": {
+    "warmupSeconds": 15,
+    "durationSeconds": 60,
+    "slos": [
+      {
+        "label": "Server errors while browsing",
+        "metric": "browsing_server_errors",
+        "stat": "passes",
+        "max": 0,
+        "unit": "count"
+      }
+    ]
+  },
+  "services": ["api-1", "api-2"],
+  "resetServices": ["taxrate"]
+}

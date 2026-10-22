@@ -1,0 +1,240 @@
+# Incident 013: the ShopFlow API, its database and simulated production traffic.
+# Edge proxy and observability come from the shared platform.
+name: nplab
+
+include:
+  - ../../platform/compose.yaml
+
+services:
+  # The API runs as two instances behind the edge proxy, deployed one after the other.
+  api-1:
+    build: ./app
+    image: nplab/013-intermittent-503s-api
+    environment:
+      PORT: "3000"
+      METRICS_PORT: "9464"
+      # The managed database lives in another availability zone, ~6 ms round trip.
+      DATABASE_URL: postgres://shop:shop@network-latency:5432/shop
+      OTEL_SERVICE_NAME: shopflow-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_TRACES_SAMPLER: parentbased_traceidratio
+      OTEL_TRACES_SAMPLER_ARG: "0.2"
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+      PYROSCOPE_SERVER_ADDRESS: http://pyroscope:4040
+      MAILWAVE_URL: http://mailwave:8025
+      MAILWAVE_API_KEY: mw_live_9f2c41d7
+      TAXRATE_URL: http://api.taxrate.example
+      PAYMENTS_URL: http://payments:8090
+      PAYMENTS_API_KEY: pf_live_6a1e92c0
+      RECOMMENDATIONS_URL: http://recommendations:8100
+    volumes:
+      # Your working copy of the code. `./lab deploy` restarts the service with it.
+      - ${LAB_APP_SRC:-./app/src}:/app/src:ro
+    ports:
+      - "127.0.0.1:${LAB_PORT_INSPECTOR:-9229}:9229"
+    # Names outside the cluster are forwarded to this resolver by Docker's DNS.
+    dns: [10.241.13.53]
+    cpus: 1
+    mem_limit: 512m
+    depends_on:
+      postgres:
+        condition: service_healthy
+      network-latency:
+        condition: service_started
+      mailwave:
+        condition: service_started
+      taxrate:
+        condition: service_started
+      payments:
+        condition: service_started
+      recommendations:
+        condition: service_started
+      upstream-dns:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      start_period: 30s
+      retries: 6
+    restart: unless-stopped
+
+  api-2:
+    # Same image as api-1, which builds it.
+    image: nplab/013-intermittent-503s-api
+    pull_policy: never
+    environment:
+      PORT: "3000"
+      METRICS_PORT: "9464"
+      # The managed database lives in another availability zone, ~6 ms round trip.
+      DATABASE_URL: postgres://shop:shop@network-latency:5432/shop
+      OTEL_SERVICE_NAME: shopflow-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_TRACES_SAMPLER: parentbased_traceidratio
+      OTEL_TRACES_SAMPLER_ARG: "0.2"
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+      PYROSCOPE_SERVER_ADDRESS: http://pyroscope:4040
+      MAILWAVE_URL: http://mailwave:8025
+      MAILWAVE_API_KEY: mw_live_9f2c41d7
+      TAXRATE_URL: http://api.taxrate.example
+      PAYMENTS_URL: http://payments:8090
+      PAYMENTS_API_KEY: pf_live_6a1e92c0
+      RECOMMENDATIONS_URL: http://recommendations:8100
+    volumes:
+      # Your working copy of the code. `./lab deploy` restarts the service with it.
+      - ${LAB_APP_SRC:-./app/src}:/app/src:ro
+    ports:
+      - "127.0.0.1:${LAB_PORT_INSPECTOR_2:-9230}:9229"
+    # Names outside the cluster are forwarded to this resolver by Docker's DNS.
+    dns: [10.241.13.53]
+    cpus: 1
+    mem_limit: 512m
+    depends_on:
+      postgres:
+        condition: service_healthy
+      network-latency:
+        condition: service_started
+      mailwave:
+        condition: service_started
+      taxrate:
+        condition: service_started
+      payments:
+        condition: service_started
+      recommendations:
+        condition: service_started
+      upstream-dns:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      start_period: 30s
+      retries: 6
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17.11-alpine
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=top
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - log_min_duration_statement=500
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: shop
+      POSTGRES_DB: shop
+    volumes:
+      - pgdata-013:/var/lib/postgresql/data
+      - ./db:/docker-entrypoint-initdb.d:ro
+    # The database instance is sized like the API: one CPU.
+    cpus: 1
+    healthcheck:
+      # Only passes once the init scripts (schema + seed) have finished.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U shop -d shop"]
+      interval: 2s
+      timeout: 3s
+      start_period: 10s
+      retries: 150
+    restart: unless-stopped
+
+  # The network between the API's availability zone and the database's (infrastructure: you don't own it).
+  network-latency:
+    build: ./services/network-latency
+    image: nplab/013-intermittent-503s-network-latency
+    environment:
+      DELAY_MS: "3"
+    restart: unless-stopped
+
+  # MailWave, the transactional email provider (a third-party service: you don't own it).
+  mailwave:
+    build: ./services/mailwave
+    image: nplab/013-intermittent-503s-mailwave
+    environment:
+      API_KEY: mw_live_9f2c41d7
+    ports:
+      # MailWave's delivery log, like a provider dashboard: /v1/messages?orderId=<id>
+      - "127.0.0.1:${LAB_PORT_MAILWAVE:-8025}:8025"
+    restart: unless-stopped
+
+  # PayFlow, the card payment provider (third party: you don't own it).
+  payments:
+    build: ./services/payments
+    image: nplab/013-intermittent-503s-payments
+    environment:
+      API_KEY: pf_live_6a1e92c0
+    ports:
+      # PayFlow's dashboard: the authorizations on a card, /v1/authorizations?paymentToken=<token>
+      - "127.0.0.1:${LAB_PORT_PAYFLOW:-8090}:8090"
+    restart: unless-stopped
+
+  # Recommendations, the data team's "Customers also bought" service (another team's: you don't own it).
+  recommendations:
+    build: ./services/recommendations
+    image: nplab/013-intermittent-503s-recommendations
+    environment:
+      MODEL: v7
+      WORKERS: "8"
+      # The vectors missing since v7 were computed on December 5.
+      MISSING_VECTORS: "0"
+    restart: unless-stopped
+
+  # TaxRate, the sales tax / VAT provider, reached at api.taxrate.example (third party: you don't own it).
+  taxrate:
+    build: ./services/taxrate
+    image: nplab/013-intermittent-503s-taxrate
+    restart: unless-stopped
+
+  # The resolver for names outside the cluster, i.e. the internet's DNS (you don't own it either).
+  upstream-dns:
+    build: ./services/upstream-dns
+    image: nplab/013-intermittent-503s-upstream-dns
+    environment:
+      DELAY_MS: "20"
+      JITTER_MS: "10"
+    networks:
+      default:
+        ipv4_address: 10.241.13.53
+    restart: unless-stopped
+
+  # Simulated production traffic, running until the lab is stopped.
+  traffic:
+    image: grafana/k6:2.1.0
+    command: ["run", "--quiet", "--no-usage-report", "--summary-mode=disabled", "/load/load.ts"]
+    environment:
+      MODE: traffic
+      BASE_URL: http://traefik
+    volumes:
+      - ./load:/load:ro
+    depends_on:
+      api-1:
+        condition: service_healthy
+      api-2:
+        condition: service_healthy
+      traefik:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # On-demand load runs (`./lab verify`); not started by `up`.
+  k6:
+    image: grafana/k6:2.1.0
+    profiles: ["tools"]
+    environment:
+      BASE_URL: http://traefik
+    volumes:
+      - ./load:/load:ro
+
+volumes:
+  pgdata-013:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 10.241.13.0/24

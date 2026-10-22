@@ -1,0 +1,42 @@
+diff --git a/incidents/013-intermittent-503s/app/src/platform/health.routes.ts b/incidents/013-intermittent-503s/app/src/platform/health.routes.ts
+index 8ee6307..eecff3e 100644
+--- a/incidents/013-intermittent-503s/app/src/platform/health.routes.ts
++++ b/incidents/013-intermittent-503s/app/src/platform/health.routes.ts
+@@ -3,7 +3,7 @@ import { config } from './config.ts';
+ import { pool } from './db.ts';
+ import { isDraining } from './lifecycle.ts';
+ 
+-/** Every service the API calls. An instance that can't reach one of them shouldn't get traffic. */
++/** Every service the API calls, for dashboards and humans: GET /health/dependencies. */
+ const DEPENDENCIES: Record<string, () => Promise<unknown>> = {
+   database: () => pool.query('SELECT 1'),
+   taxrate: () => ping(new URL('/health', config.taxrateUrl).href),
+@@ -40,15 +40,24 @@ healthRouter.get('/health', (_req, res) => {
+ });
+ 
+ /**
+- * Readiness: the proxy may send requests here. Not while shutting down, and not
+- * while any dependency is unhealthy.
++ * Readiness: the proxy may send requests here. Not while shutting down. It only
++ * checks what every request needs, the database: the other dependencies are shared
++ * by all instances, so failing readiness over one of them would take every
++ * instance out at once, and with them every page, even those that don't use it.
++ * Requests that need a failing dependency fail on their own.
+  */
+ healthRouter.get('/ready', async (_req, res) => {
+   if (isDraining()) {
+     res.status(503).json({ status: 'draining' });
+     return;
+   }
++  await pool.query('SELECT 1');
++  res.json({ status: 'ready' });
++});
++
++/** The state of every dependency: for dashboards and humans, never for the proxy. */
++healthRouter.get('/health/dependencies', async (_req, res) => {
+   const dependencies = await checkDependencies();
+-  const ready = Object.values(dependencies).every((result) => result === 'ok');
+-  res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'degraded', dependencies });
++  const healthy = Object.values(dependencies).every((result) => result === 'ok');
++  res.json({ status: healthy ? 'ok' : 'degraded', dependencies });
+ });
