@@ -1,0 +1,82 @@
+diff --git a/incidents/007-hanging-requests/app/src/orders/orders.service.ts b/incidents/007-hanging-requests/app/src/orders/orders.service.ts
+index 8824c6c..ad264ff 100644
+--- a/incidents/007-hanging-requests/app/src/orders/orders.service.ts
++++ b/incidents/007-hanging-requests/app/src/orders/orders.service.ts
+@@ -1,7 +1,7 @@
+ import { Counter } from 'prom-client';
+ import { quoteTax } from '../checkout/tax.ts';
+ import { sendOrderConfirmation } from '../notifications/order-confirmation.ts';
+-import { pool } from '../platform/db.ts';
++import { transaction } from '../platform/db.ts';
+ import { logger } from '../platform/logger.ts';
+ import { badRequest, notFound } from '../shared/http-errors.ts';
+ import { formatMoney } from '../shared/money.ts';
+@@ -68,31 +68,30 @@ export async function placeOrder(input: NewOrder) {
+ 
+   // One transaction for the coupon and the order: the coupon row stays locked
+   // until the order is written, so a limited coupon can't be used twice.
+-  const client = await pool.connect();
+-  await client.query('BEGIN');
+-
+-  let discountCents = 0;
+-  if (input.couponCode) {
+-    const coupon = await lockCoupon(input.couponCode, client);
+-    if (!coupon || !isRedeemable(coupon)) throw badRequest(`coupon ${input.couponCode} is not valid`);
+-    discountCents = Math.round((subtotalCents * coupon.percentOff) / 100);
+-    await redeemCoupon(coupon.code, client);
+-  }
+-
+-  const { taxCents } = await quoteTax({ country: customer.country, amountCents: subtotalCents - discountCents });
+-  const orderId = await insertOrder(
+-    {
+-      customerId: input.customerId,
+-      totalCents: subtotalCents - discountCents + taxCents,
+-      taxCents,
+-      discountCents,
+-      couponCode: input.couponCode ?? null,
+-      items,
+-    },
+-    client,
+-  );
+-  await client.query('COMMIT');
+-  client.release();
++  // transaction() rolls back and returns the connection to the pool on every
++  // path, including the early "invalid coupon" exit.
++  const orderId = await transaction(async (client) => {
++    let discountCents = 0;
++    if (input.couponCode) {
++      const coupon = await lockCoupon(input.couponCode, client);
++      if (!coupon || !isRedeemable(coupon)) throw badRequest(`coupon ${input.couponCode} is not valid`);
++      discountCents = Math.round((subtotalCents * coupon.percentOff) / 100);
++      await redeemCoupon(coupon.code, client);
++    }
++
++    const { taxCents } = await quoteTax({ country: customer.country, amountCents: subtotalCents - discountCents });
++    return insertOrder(
++      {
++        customerId: input.customerId,
++        totalCents: subtotalCents - discountCents + taxCents,
++        taxCents,
++        discountCents,
++        couponCode: input.couponCode ?? null,
++        items,
++      },
++      client,
++    );
++  });
+ 
+   const order = await getOrder(orderId);
+   if (!order) throw new Error(`order ${orderId} vanished after insert`);
+diff --git a/incidents/007-hanging-requests/app/src/platform/db.ts b/incidents/007-hanging-requests/app/src/platform/db.ts
+index 0181b23..dc127c5 100644
+--- a/incidents/007-hanging-requests/app/src/platform/db.ts
++++ b/incidents/007-hanging-requests/app/src/platform/db.ts
+@@ -8,6 +8,8 @@ export const pool = new pg.Pool({
+   connectionString: config.databaseUrl,
+   max: config.dbPoolSize,
+   idleTimeoutMillis: 30_000,
++  // Never wait for a connection forever: a timeout turns a silent hang into an error.
++  connectionTimeoutMillis: 5_000,
+ });
+ 
+ pool.on('error', (err) => logger.error({ err }, 'unexpected error on idle database client'));

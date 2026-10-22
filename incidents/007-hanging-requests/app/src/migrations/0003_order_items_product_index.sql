@@ -1,0 +1,6 @@
+-- no-transaction
+-- Product pages show how many units were bought (2.20.0): find a product's
+-- order items through an index instead of scanning all of them. The index
+-- includes the quantity, so the sum is answered from the index alone.
+-- CONCURRENTLY: build it without blocking orders being written meanwhile.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS order_items_product_id_idx ON order_items (product_id) INCLUDE (quantity);

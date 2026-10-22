@@ -1,0 +1,82 @@
+{
+  "id": "007",
+  "title": "Hanging requests",
+  "difficulty": 2,
+  "estimatedTime": "45–75 min",
+  "summary": "A minute after every restart the API stops answering: no errors, no CPU, requests just hang.",
+  "alert": "[FIRING] ApiHighLatencyP95: shopflow-api p95 latency at the edge is above 500 ms (currently ~10 s)",
+  "submit": {
+    "questions": [
+      {
+        "id": "waiting",
+        "type": "choice",
+        "prompt": "Most of the hanging requests are waiting for…",
+        "choices": [
+          { "id": "pool", "label": "A free connection from the API's database pool" },
+          { "id": "lock", "label": "A row lock inside PostgreSQL" },
+          { "id": "db-cpu", "label": "CPU time on the database" },
+          { "id": "event-loop", "label": "The event loop" },
+          { "id": "downstream", "label": "TaxRate or MailWave" }
+        ],
+        "answers": ["5357353e2d4e1531bd204feb71c1d3cc12872a04c7bb87e057858b3143aed21c"]
+      },
+      {
+        "id": "why",
+        "type": "choice",
+        "prompt": "Why do connections stop coming back to the pool?",
+        "choices": [
+          {
+            "id": "leak",
+            "label": "A code path takes a connection and never gives it back, leaving its transaction open"
+          },
+          { "id": "slow-queries", "label": "Slow queries keep every connection busy" },
+          { "id": "pool-size", "label": "The pool is too small for today's traffic" },
+          { "id": "max-connections", "label": "PostgreSQL refuses new connections (max_connections)" },
+          { "id": "network", "label": "Connections hang on the network to the database" }
+        ],
+        "answers": ["38ba9fb3fc33ead72f3c447f98124c7af5affb97f8172a593e4e08f05282a642"]
+      },
+      {
+        "id": "trigger",
+        "type": "choice",
+        "prompt": "Which requests start it?",
+        "choices": [
+          { "id": "invalid-coupon", "label": "Orders with a coupon that isn't valid (expired, used up or unknown)" },
+          { "id": "valid-coupon", "label": "Orders with a valid coupon" },
+          { "id": "email", "label": "Orders whose confirmation email fails" },
+          { "id": "report", "label": "Finance sales exports" },
+          { "id": "history", "label": "Order history requests from the mobile app" }
+        ],
+        "answers": ["3dc82017e0a2e8a08123d51f7215be1717ee698075b1e28a7745c7a5fa269dd8"]
+      }
+    ]
+  },
+  "verify": {
+    "warmupSeconds": 15,
+    "durationSeconds": 60,
+    "slos": [
+      {
+        "label": "Checkout p95",
+        "metric": "http_req_duration{journey:checkout}",
+        "stat": "p(95)",
+        "max": 400,
+        "unit": "ms"
+      },
+      {
+        "label": "Catalog p95",
+        "metric": "http_req_duration{journey:catalog}",
+        "stat": "p(95)",
+        "max": 250,
+        "unit": "ms"
+      },
+      { "label": "Error rate", "metric": "http_req_failed", "stat": "rate", "max": 0.005, "unit": "ratio" },
+      {
+        "label": "Requests waiting for a DB connection (max)",
+        "source": "prometheus",
+        "query": "max_over_time(db_pool_connections{job=\"api\",state=\"waiting\"}[$range])",
+        "max": 5,
+        "unit": "count"
+      }
+    ]
+  }
+}

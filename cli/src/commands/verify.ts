@@ -108,38 +108,38 @@ export async function verify(args: string[], flags: { ci: boolean; expectFail: b
 
   log.title(`Verifying incident ${incident.id} · ${incident.title}`);
 
-  // Measure what is on disk, not whatever happened to be deployed last.
-  if (progress.deployedHash !== currentHash) {
-    log.step('Your code changed since the last deploy; deploying it first…');
-    await deploy(incident, { note: 'Deployed working copy (verify)' });
-    progress.deployedHash = currentHash;
-    saveState(state);
-  }
-
-  log.step('Functional checks: the API must behave exactly as before');
-  const checks = await runChecks(incident);
-  for (const check of checks) {
-    if (check.error) log.fail(`${check.name} ${dim(`— ${check.error}`)}`);
-    else log.ok(dim(check.name));
-  }
-  if (checks.some((check) => check.error)) {
-    log.fail(
-      bold(
-        checks.some((check) => check.error && check.unavailable)
-          ? 'Functional checks failed: the API kept going down while they ran.'
-          : 'Functional checks failed: a fix must not change what the API returns.',
-      ),
-    );
-    process.exitCode = 1;
-    return;
-  }
-
   const { warmupSeconds, durationSeconds } = incident.verify;
   const trafficWasOn = (await runningServices(incident)).includes('traffic');
   await composeOrFail(incident, ['stop', 'traffic'], 'Pausing production traffic');
   let before: Measurement | undefined;
   let after: Measurement;
   try {
+    // Every run starts from a fresh deploy of what is on disk: nothing left over from
+    // earlier runs (a heap near its limit, an exhausted pool, a hand-made index…).
+    log.step('Deploying your working copy…');
+    if (incident.resetDatabase) await restoreDatabase(incident);
+    await deploy(incident, { note: 'Deployed working copy (verify)' });
+    progress.deployedHash = currentHash;
+    saveState(state);
+
+    log.step('Functional checks: the API must behave exactly as before');
+    const checks = await runChecks(incident);
+    for (const check of checks) {
+      if (check.error) log.fail(`${check.name} ${dim(`— ${check.error}`)}`);
+      else log.ok(dim(check.name));
+    }
+    if (checks.some((check) => check.error)) {
+      log.fail(
+        bold(
+          checks.some((check) => check.error && check.unavailable)
+            ? 'Functional checks failed: the API kept going down while they ran.'
+            : 'Functional checks failed: a fix must not change what the API returns.',
+        ),
+      );
+      process.exitCode = 1;
+      return;
+    }
+
     if (flags.baseline && !unchanged) {
       before = loadBaseline(incident, originalHash);
       if (!before) {
@@ -150,15 +150,10 @@ export async function verify(args: string[], flags: { ci: boolean; expectFail: b
           before = await measure(incident, 'original', originalHash);
           saveBaseline(incident, before);
         } finally {
+          if (incident.resetDatabase) await restoreDatabase(incident);
           await deploy(incident, { note: 'Deployed working copy (verify)' });
         }
       }
-    }
-
-    if (incident.resetDatabase) {
-      log.step('Restoring the original database; your migrations run again on deploy…');
-      await restoreDatabase(incident);
-      await deploy(incident, { note: 'Deployed working copy on the original database (verify)' });
     }
 
     log.step(`Load test: ${warmupSeconds}s warm-up, then ${durationSeconds}s of the standard traffic mix…`);

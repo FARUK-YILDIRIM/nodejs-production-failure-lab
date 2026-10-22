@@ -39,7 +39,7 @@ export async function expectBody(response: Response, expectedSha256: string): Pr
   expect(actual === expectedSha256, `response body changed (sha256 ${actual.slice(0, 12)}…, expected ${expectedSha256.slice(0, 12)}…)`);
 }
 
-const TIMEOUT_MS = 30_000;
+const TIMEOUT_MS = 15_000;
 
 export const api: Api = {
   get: (url) => fetch(`${urls.api}${url}`, { signal: AbortSignal.timeout(TIMEOUT_MS) }),
@@ -79,7 +79,13 @@ async function waitUntilHealthy(timeoutMs: number): Promise<boolean> {
 export async function runChecks(incident: Incident): Promise<CheckResult[]> {
   const module = (await import(pathToFileURL(path.join(incident.dir, 'checks.ts')).href)) as { checks: Check[] };
   const results: CheckResult[] = [];
+  let failuresInARow = 0;
   for (const check of module.checks) {
+    // An API that stopped answering would make every remaining check wait for its timeout.
+    if (failuresInARow >= 3) {
+      results.push({ name: check.name, error: 'skipped: the previous checks failed' });
+      continue;
+    }
     let result: CheckResult = { name: check.name };
     // A failure while the API is down (e.g. restarting after a crash) isn't a behavior
     // change: wait for it to come back and try again.
@@ -95,6 +101,7 @@ export async function runChecks(incident: Incident): Promise<CheckResult[]> {
         await waitUntilHealthy(60_000);
       }
     }
+    failuresInARow = result.error ? failuresInARow + 1 : 0;
     results.push(result);
   }
   return results;

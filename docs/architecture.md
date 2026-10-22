@@ -57,10 +57,10 @@ The service's instrumentation is loaded with `node --import ./src/telemetry/regi
 
 `./lab verify` runs, in order:
 
-1. **Deploy** the working copy if it changed since the last deploy.
-2. **Functional checks** (`checks.ts`): golden SHA-256 hashes of deterministic responses, plus behavioral checks for writes and validation. A fix must not change what the API returns.
+1. **Pause the simulated traffic and deploy** the working copy fresh (for `resetDatabase` incidents, on a restored database). Every run starts from the same state: no heap near its limit, no exhausted pool, no hand-made index left over from earlier.
+2. **Functional checks** (`checks.ts`): golden SHA-256 hashes of deterministic responses, plus behavioral checks for writes and validation. A fix must not change what the API returns. Checks retry while the API is restarting, and stop early if it stops answering altogether.
 3. **Baseline**, once per original snapshot: deploy the original code, warm up, run the load, collect metrics; then redeploy the working copy. The result is cached in `.lab/runs/`.
-4. **Measurement**: the background traffic is paused, then k6 warms up for 15 s and runs the standard traffic mix for 60 s. Client-side percentiles come from k6's summary; server-side runtime numbers come from Prometheus for exactly that window.
+4. **Measurement**: k6 warms up, then runs the standard traffic mix for the incident's duration. Client-side percentiles come from k6's summary; server-side numbers come from Prometheus for exactly that window.
 5. **Verdict**: every SLO in `incident.json` must be met. An SLO reads either a client-side statistic from the k6 summary (`metric` + `stat`) or, with `"source": "prometheus"`, a PromQL query evaluated over exactly the measured window (`$range`), e.g. restarts or live-heap growth.
 
 The load model uses k6's `constant-arrival-rate` executor. New requests keep arriving while the service stalls, as real users do. A closed model (a fixed number of connections waiting for responses) would stop sending during a stall and report a far rosier tail.
