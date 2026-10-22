@@ -1,0 +1,21 @@
+{
+  // Type checking for the lab CLI and the incidents' functional checks.
+  // Each incident's service has its own tsconfig.json (see scripts/typecheck-incidents.ts).
+  "compilerOptions": {
+    "target": "esnext",
+    "lib": ["esnext", "dom"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "isolatedModules": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "skipLibCheck": true
+  },
+  "include": ["cli/src", "scripts", "incidents/*/checks.ts"]
+}

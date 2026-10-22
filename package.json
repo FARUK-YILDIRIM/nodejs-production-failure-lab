@@ -1,0 +1,20 @@
+{
+  "name": "node-production-failure-lab",
+  "version": "0.1.0",
+  "description": "A CTF-style lab of realistic Node.js production incidents: break it, observe it, diagnose it, fix it, measure it.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "lab": "node --disable-warning=ExperimentalWarning cli/src/main.ts",
+    "typecheck": "tsc -p tsconfig.json && node scripts/typecheck-incidents.ts"
+  },
+  "devDependencies": {
+    "@types/k6": "^2.3.0",
+    "@types/node": "^24.19.2",
+    "typescript": "^7.0.2"
+  }
+}

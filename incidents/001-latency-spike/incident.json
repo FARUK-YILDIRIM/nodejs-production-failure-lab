@@ -1,0 +1,61 @@
+{
+  "id": "001",
+  "title": "Latency spike",
+  "difficulty": 1,
+  "estimatedTime": "30–60 min",
+  "summary": "Customers say pages hang for a second or two, yet traffic and the error rate look normal.",
+  "alert": "[FIRING] ApiHighLatencyP95: shopflow-api p95 latency at the edge is above 500 ms",
+  "submit": {
+    "questions": [
+      {
+        "id": "endpoint",
+        "type": "endpoint",
+        "prompt": "Which endpoint triggers the incident?",
+        "hint": "e.g. GET /api/something",
+        "answers": [
+          "341c6809f422b471af3d6a8650e7f9efb7d84f1ba0eaa5bd871025ad6d10d1a9",
+          "bb3f1cc5cd91e1de267de62a08d258c05503f71cec4ee2c88dd2b27a2448566b"
+        ]
+      },
+      {
+        "id": "resource",
+        "type": "choice",
+        "prompt": "Which resource is saturated?",
+        "choices": [
+          { "id": "db-pool", "label": "The database connection pool" },
+          { "id": "db-server", "label": "The database server (CPU or I/O)" },
+          { "id": "event-loop", "label": "The Node.js event loop (main thread)" },
+          { "id": "threadpool", "label": "The libuv thread pool" },
+          { "id": "memory", "label": "Memory / the garbage collector" },
+          { "id": "downstream", "label": "A downstream dependency or the network" }
+        ],
+        "answers": ["3f6ea53fc8c753f4823a7c9ffc84541434f5b3517ba3422a5985eaee8d3ef344"]
+      },
+      {
+        "id": "cause",
+        "type": "choice",
+        "prompt": "What is the root cause?",
+        "choices": [
+          { "id": "slow-query", "label": "A slow or unindexed SQL query" },
+          { "id": "cpu-sync", "label": "CPU-heavy synchronous JavaScript on the request path" },
+          { "id": "leak", "label": "A memory leak" },
+          { "id": "locks", "label": "Lock contention in the database" },
+          { "id": "pool-leak", "label": "Database connections that are never released" },
+          { "id": "retries", "label": "Retries amplifying the load" }
+        ],
+        "answers": ["138a8c70cc690c01e610779c31400452003cb52a3ba9d5b322d7f33567f91b02"]
+      }
+    ]
+  },
+  "verify": {
+    "warmupSeconds": 15,
+    "durationSeconds": 60,
+    "slos": [
+      { "label": "Catalog p95", "metric": "http_req_duration{journey:catalog}", "stat": "p(95)", "max": 250, "unit": "ms" },
+      { "label": "Checkout p95", "metric": "http_req_duration{journey:checkout}", "stat": "p(95)", "max": 400, "unit": "ms" },
+      { "label": "Account p95", "metric": "http_req_duration{journey:account}", "stat": "p(95)", "max": 300, "unit": "ms" },
+      { "label": "Reports p95", "metric": "http_req_duration{journey:reports}", "stat": "p(95)", "max": 3000, "unit": "ms" },
+      { "label": "Error rate", "metric": "http_req_failed", "stat": "rate", "max": 0.01, "unit": "ratio" }
+    ]
+  }
+}

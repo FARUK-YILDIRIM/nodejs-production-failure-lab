@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run typecheck
+
+  # Every incident must still reproduce, and its reference fix must still work.
+  incident:
+    name: incident ${{ matrix.incident }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        incident: [001-latency-spike]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Start the incident
+        run: ./lab start ${{ matrix.incident }} --no-traffic
+
+      - name: The original code violates its SLOs
+        run: ./lab verify ${{ matrix.incident }} --ci --expect-fail
+
+      - name: Apply the reference fix
+        run: git apply spoilers/${{ matrix.incident }}/fix.patch
+
+      - name: The reference fix meets its SLOs
+        run: ./lab verify ${{ matrix.incident }} --ci
+
+      - name: Service logs
+        if: failure()
+        run: docker compose -f incidents/${{ matrix.incident }}/compose.yaml logs --tail 200 api postgres
+
+      - name: Stop
+        if: always()
+        run: ./lab stop --volumes

@@ -1,0 +1,88 @@
+# Authoring an incident
+
+A good incident is a **realistic failure** that is **observable** with the lab's tools, **hidden** behind symptoms, and **provably fixed** by a measurable change.
+
+## 1. Design it on paper first
+
+Answer these before writing code:
+
+- **The failure**: what goes wrong, and why would a reasonable engineer have written that code? (A bulk export that loops over the catalog is realistic; a `for` loop to five billion is not.)
+- **Victim vs. culprit**: which requests suffer, and which one causes it? The best incidents make innocent endpoints look guilty.
+- **The evidence chain**: which observations, in which tools, lead from the alert to the root cause? Write them down as a table; it becomes `ROOT_CAUSE.md`.
+- **Red herrings**: what looks guilty but isn't? Let them emerge naturally (a recent unrelated deploy, a busy panel) rather than planting fake bugs.
+- **Trigger**: why does it start *now*? A usage pattern, a data volume, a deploy, a dependency.
+- **The fix, measured**: what changes the numbers, and by how much?
+
+## 2. Create the incident
+
+```
+incidents/00N-<symptom>/       # name it after the symptom, never the cause
+├── README.md                  # the brief
+├── incident.json
+├── compose.yaml
+├── app/                       # start from the latest incident's app with its fix applied
+├── db/
+├── load/load.ts
+└── checks.ts
+spoilers/00N-<symptom>/
+├── hints/1.md 2.md 3.md
+├── solution/ROOT_CAUSE.md FIX.md POSTMORTEM.md
+└── fix.patch
+```
+
+Copy the most recent incident, apply its `fix.patch` so the service starts healthy, then introduce the new failure. Bump the version in `app/package.json` and write a believable `app/CHANGELOG.md`: it's part of the investigation.
+
+Keep the failure out of names and comments: no `INCIDENT_` flags, no `// slow on purpose`.
+
+## 3. The brief (`README.md`)
+
+Write it like a page from on-call: an alert, a message from Support, what you know, recent deploys. Give symptoms and context, not conclusions. Don't write "CPU is at 96 %": let the student find it. End with the tools table, the success criteria and the rules.
+
+## 4. `incident.json`
+
+- `submit.questions`: a few structured questions (an endpoint, a choice among plausible resources, a choice among plausible root causes). Store hashes, never answers:
+
+  ```bash
+  ./lab dev answer-hash 004 endpoint "/api/orders"
+  ```
+
+  Add every accepted spelling's hash to `answers`.
+- `verify.slos`: user-facing SLOs evaluated on the k6 summary (`metric` + `stat` + `max`). Choose targets the broken code clearly misses and the reference fix clearly meets.
+
+## 5. Functional checks (`checks.ts`)
+
+Every deterministic endpoint gets a golden SHA-256 of its response body, taken from the broken service (it is functionally correct, just slow or fragile):
+
+```bash
+./lab dev body-hash "/api/products/4242"
+```
+
+Writes and validation get behavioral checks. The seed must be deterministic (`setseed`, fixed dates), so hashes match on every machine.
+
+## 6. Traffic (`load/load.ts`)
+
+Use `constant-arrival-rate` scenarios, one per customer journey, tagged with `journey` (SLOs refer to `http_req_duration{journey:…}`). The trigger should be part of normal traffic, not a special "attack" scenario.
+
+## 7. Calibrate
+
+```bash
+./lab start 00N
+./lab verify 00N              # the original: must clearly violate the SLOs
+git apply spoilers/00N-*/fix.patch
+./lab verify 00N              # the fix: must clearly meet them
+./lab reset 00N --yes
+```
+
+Check the dashboards while it runs: are the symptoms visible? Is the evidence chain in `ROOT_CAUSE.md` really observable? Profile it yourself.
+
+## 8. Hints and solution
+
+- Three hints, from "where to look" to "what to look at". The third should make the incident solvable without giving the answer away.
+- `ROOT_CAUSE.md`: one-sentence summary, the mechanism, the evidence chain, trigger vs. root cause.
+- `FIX.md`: mitigation, the fix with measured before/after numbers, alternatives and their trade-offs, prevention (including an alert rule).
+- `POSTMORTEM.md`: an example postmortem in the template's format.
+- `fix.patch`: `git diff` of the fix against the incident's `app/src`.
+
+## 9. CI
+
+Add the incident to the matrix in `.github/workflows/ci.yml`. CI starts it, expects the original code to fail its SLOs, applies `fix.patch`, and expects the fix to pass.

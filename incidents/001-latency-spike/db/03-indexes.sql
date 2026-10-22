@@ -1,0 +1,15 @@
+-- Secondary indexes, created after the bulk load.
+
+CREATE INDEX products_created_idx ON products (created_at DESC, id DESC);
+CREATE INDEX products_category_created_idx ON products (category_id, created_at DESC, id DESC);
+
+CREATE INDEX orders_customer_created_idx ON orders (customer_id, created_at DESC);
+CREATE INDEX orders_created_idx ON orders (created_at);
+
+CREATE INDEX order_items_order_idx ON order_items (order_id);
+CREATE INDEX order_items_product_idx ON order_items (product_id);
+
+ANALYZE;
+
+-- Start with clean query statistics (the seed itself is not interesting).
+SELECT pg_stat_statements_reset();

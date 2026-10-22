@@ -1,0 +1,12 @@
+{
+  // Keep spoilers out of sight while you play. Authors: comment these out.
+  "files.exclude": {
+    "spoilers": true,
+    ".lab": true
+  },
+  "search.exclude": {
+    "spoilers": true,
+    ".lab": true,
+    "**/node_modules": true
+  }
+}

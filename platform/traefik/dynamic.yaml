@@ -1,0 +1,13 @@
+# Edge routing: every request on :80 goes to the incident's API service.
+http:
+  routers:
+    api:
+      rule: PathPrefix(`/`)
+      entryPoints: [web]
+      service: api
+
+  services:
+    api:
+      loadBalancer:
+        servers:
+          - url: http://api:3000

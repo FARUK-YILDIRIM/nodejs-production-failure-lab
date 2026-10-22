@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Entry point of the lab CLI. Needs Node.js 22.18+ (runs the TypeScript sources directly) and Docker.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "lab: Node.js 22.18+ is required (https://nodejs.org)" >&2
+  exit 1
+fi
+
+if ! node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 18) ? 0 : 1)'; then
+  echo "lab: Node.js 22.18+ is required, found $(node --version)" >&2
+  exit 1
+fi
+
+exec node --disable-warning=ExperimentalWarning "$root/cli/src/main.ts" "$@"

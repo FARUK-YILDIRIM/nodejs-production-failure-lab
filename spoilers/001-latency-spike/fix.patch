@@ -1,0 +1,124 @@
+diff --git a/incidents/001-latency-spike/app/src/catalog/catalog.repository.ts b/incidents/001-latency-spike/app/src/catalog/catalog.repository.ts
+index 5100b94..f238924 100644
+--- a/incidents/001-latency-spike/app/src/catalog/catalog.repository.ts
++++ b/incidents/001-latency-spike/app/src/catalog/catalog.repository.ts
+@@ -22,13 +22,6 @@ export interface Product {
+   createdAt: Date;
+ }
+ 
+-export interface CatalogEntry {
+-  id: number;
+-  sku: string;
+-  name: string;
+-  category: string;
+-}
+-
+ const PRODUCT_COLUMNS = `
+   p.id, p.sku, p.name, p.description, p.price_cents AS "priceCents", p.category_id AS "categoryId",
+   c.name AS category, c.slug AS "categorySlug", p.created_at AS "createdAt"`;
+@@ -107,14 +100,3 @@ export function listRelatedProducts(product: Product, limit = 4): Promise<Produc
+     [product.categoryId, product.id, limit],
+   );
+ }
+-
+-/** Every product with its category name, ordered by id. */
+-export function listProductCatalog(): Promise<CatalogEntry[]> {
+-  return query<CatalogEntry>(
+-    'products.catalog',
+-    `SELECT p.id, p.sku, p.name, c.name AS category
+-       FROM products p
+-       JOIN categories c ON c.id = p.category_id
+-      ORDER BY p.id`,
+-  );
+-}
+diff --git a/incidents/001-latency-spike/app/src/reports/sales-report.ts b/incidents/001-latency-spike/app/src/reports/sales-report.ts
+index da395c5..b2e30ce 100644
+--- a/incidents/001-latency-spike/app/src/reports/sales-report.ts
++++ b/incidents/001-latency-spike/app/src/reports/sales-report.ts
+@@ -1,4 +1,3 @@
+-import { listProductCatalog } from '../catalog/catalog.repository.ts';
+ import { query } from '../platform/db.ts';
+ import { toCsv } from '../shared/csv.ts';
+ import { formatMoney } from '../shared/money.ts';
+@@ -26,42 +25,43 @@ interface Sale {
+   orderId: number;
+   orderedAt: Date;
+   customerEmail: string;
+-  productId: number;
++  sku: string;
++  product: string;
++  category: string;
+   quantity: number;
+   unitPriceCents: number;
+ }
+ 
+ /** One CSV line per order item sold in the given range, oldest first. */
+ export async function buildSalesReport(range: DateRange): Promise<string> {
++  // The database joins product and category details through indexes, instead
++  // of the API scanning the whole catalog once per line.
+   const sales = await query<Sale>(
+     'reports.sales',
+     `SELECT o.id AS "orderId", o.created_at AS "orderedAt", c.email AS "customerEmail",
+-            i.product_id AS "productId", i.quantity, i.unit_price_cents AS "unitPriceCents"
++            p.sku, p.name AS product, cat.name AS category,
++            i.quantity, i.unit_price_cents AS "unitPriceCents"
+        FROM orders o
+        JOIN customers c ON c.id = o.customer_id
+        JOIN order_items i ON i.order_id = o.id
++       JOIN products p ON p.id = i.product_id
++       JOIN categories cat ON cat.id = p.category_id
+       WHERE o.created_at >= $1 AND o.created_at < $2
+       ORDER BY o.created_at, o.id, i.id`,
+     [range.from, range.to],
+   );
+ 
+-  // Finance needs SKU, product name and category next to each line.
+-  const catalog = await listProductCatalog();
+-
+-  const rows = sales.map((sale) => {
+-    const product = catalog.find((entry) => entry.id === sale.productId);
+-    return [
+-      sale.orderId,
+-      sale.orderedAt.toISOString().slice(0, 10),
+-      sale.customerEmail,
+-      product?.sku,
+-      product?.name,
+-      product?.category,
+-      sale.quantity,
+-      formatMoney(sale.unitPriceCents),
+-      formatMoney(sale.unitPriceCents * sale.quantity),
+-    ];
+-  });
++  const rows = sales.map((sale) => [
++    sale.orderId,
++    sale.orderedAt.toISOString().slice(0, 10),
++    sale.customerEmail,
++    sale.sku,
++    sale.product,
++    sale.category,
++    sale.quantity,
++    formatMoney(sale.unitPriceCents),
++    formatMoney(sale.unitPriceCents * sale.quantity),
++  ]);
+ 
+   return toCsv(HEADER, rows);
+ }
+diff --git a/incidents/001-latency-spike/app/src/shared/money.ts b/incidents/001-latency-spike/app/src/shared/money.ts
+index 7ce87b1..b2c7bc1 100644
+--- a/incidents/001-latency-spike/app/src/shared/money.ts
++++ b/incidents/001-latency-spike/app/src/shared/money.ts
+@@ -1,4 +1,13 @@
++// Building an Intl.NumberFormat is expensive (locale data, option resolution);
++// formatting with an existing one is cheap. Keep one per currency.
++const formatters = new Map<string, Intl.NumberFormat>();
++
+ /** Formats an amount in cents for display, e.g. 123456 → "$1,234.56". */
+ export function formatMoney(cents: number, currency = 'USD'): string {
+-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(cents / 100);
++  let formatter = formatters.get(currency);
++  if (!formatter) {
++    formatter = new Intl.NumberFormat('en-US', { style: 'currency', currency });
++    formatters.set(currency, formatter);
++  }
++  return formatter.format(cents / 100);
+ }
