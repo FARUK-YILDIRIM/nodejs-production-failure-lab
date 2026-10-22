@@ -1181,21 +1181,74 @@
       ]
     },
     {
+      "type": "timeseries",
+      "id": 23,
+      "title": "Active libuv resources, by type",
+      "description": "process.getActiveResourcesInfo() at each scrape: sockets, timers, and pending requests such as DNS lookups (GetAddrInfoReqWrap) or file system calls (FSReqCallback).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 56
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (type) (nodejs_active_resources{job=\"api\"})",
+          "legendFormat": "{{type}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
       "type": "row",
       "title": "Database (PostgreSQL)",
-      "id": 23,
+      "id": 24,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 64
       },
       "panels": []
     },
     {
       "type": "table",
-      "id": 24,
+      "id": 25,
       "title": "Top queries by total time (pg_stat_statements)",
       "description": "Measured inside PostgreSQL, cumulative since the statistics were last reset.",
       "datasource": {
@@ -1206,7 +1259,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 57
+        "y": 65
       },
       "targets": [
         {
@@ -1246,25 +1299,25 @@
     {
       "type": "row",
       "title": "Dig deeper",
-      "id": 25,
+      "id": 26,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 66
+        "y": 74
       },
       "panels": []
     },
     {
       "type": "text",
-      "id": 26,
+      "id": 27,
       "title": "Tools",
       "gridPos": {
         "h": 6,
         "w": 24,
         "x": 0,
-        "y": 67
+        "y": 75
       },
       "options": {
         "mode": "markdown",

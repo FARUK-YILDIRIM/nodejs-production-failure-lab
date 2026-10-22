@@ -4,7 +4,7 @@ import { dev } from './commands/dev.ts';
 import { hint } from './commands/hint.ts';
 import { report } from './commands/report.ts';
 import { reset } from './commands/reset.ts';
-import { logs, psql } from './commands/shell.ts';
+import { logs, psql, shell } from './commands/shell.ts';
 import { solution } from './commands/solution.ts';
 import { start } from './commands/start.ts';
 import { list, status } from './commands/status.ts';
@@ -36,6 +36,7 @@ ${bold('Tools')}
   traffic on|off        Pause or resume simulated production traffic
   logs [service]        Follow a service's logs (default: api)
   psql                  SQL shell on the incident's database
+  shell [service]       A shell inside a service's container (default: api)
   reset [id]            Restore the original code and start over  ${dim('--yes')}
 
 ${bold('Authoring')}  ${dim('(see docs/authoring-incidents.md)')}
@@ -92,6 +93,8 @@ async function main(argv: string[]): Promise<void> {
       return logs(args);
     case 'psql':
       return psql();
+    case 'shell':
+      return shell(args);
     case 'reset':
       return reset(args, { yes: flags.yes });
     case 'dev':

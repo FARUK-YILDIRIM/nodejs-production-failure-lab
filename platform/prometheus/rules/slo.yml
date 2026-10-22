@@ -39,3 +39,14 @@ groups:
           severity: page
         annotations:
           summary: "The API process restarted {{ $value }} times in the last 15 minutes"
+
+      - alert: CheckoutSlow
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_server_request_duration_seconds_bucket{job="api", route="/api/orders", method="POST"}[2m]))
+          ) > 1
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: "p95 of POST /api/orders is above 1 s"

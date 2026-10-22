@@ -1,0 +1,75 @@
+diff --git a/incidents/004-slow-checkout/app/src/checkout/tax.ts b/incidents/004-slow-checkout/app/src/checkout/tax.ts
+index 4249723..0af12f8 100644
+--- a/incidents/004-slow-checkout/app/src/checkout/tax.ts
++++ b/incidents/004-slow-checkout/app/src/checkout/tax.ts
+@@ -1,6 +1,5 @@
+-import http from 'node:http';
+ import { config } from '../platform/config.ts';
+-import { outboundDuration } from '../platform/http-client.ts';
++import { callService } from '../platform/http-client.ts';
+ 
+ export interface TaxQuote {
+   rateBasisPoints: number;
+@@ -10,37 +9,18 @@ export interface TaxQuote {
+ /**
+  * Sales tax / VAT for an order, from TaxRate.
+  *
+- * TaxRate closes idle keep-alive connections after 5 s, which gave us
+- * ECONNRESET errors on reused sockets in staging (#596), so every quote
+- * uses a fresh connection.
++ * Uses the shared HTTP client, which keeps connections to TaxRate open and
++ * reuses them: a DNS lookup and a TCP handshake only happen when a new
++ * connection is needed, not on every quote. It also closes idle connections
++ * before TaxRate does (it reads the server's Keep-Alive timeout), which is
++ * what caused the ECONNRESET errors of #596.
+  */
+-export function quoteTax(request: { country: string; amountCents: number }): Promise<TaxQuote> {
+-  const body = JSON.stringify(request);
+-  const stopTimer = outboundDuration.startTimer({ peer: 'taxrate', method: 'POST' });
+-
+-  return new Promise((resolve, reject) => {
+-    const req = http.request(
+-      new URL('/v1/quotes', config.taxrateUrl),
+-      {
+-        method: 'POST',
+-        agent: false,
+-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+-      },
+-      (res) => {
+-        let raw = '';
+-        res.setEncoding('utf8');
+-        res.on('data', (chunk: string) => (raw += chunk));
+-        res.on('end', () => {
+-          stopTimer({ status_code: String(res.statusCode) });
+-          if (res.statusCode !== 200) reject(new Error(`TaxRate responded ${res.statusCode}: ${raw}`));
+-          else resolve(JSON.parse(raw) as TaxQuote);
+-        });
+-      },
+-    );
+-    req.on('error', (err) => {
+-      stopTimer({ status_code: 'error' });
+-      reject(err);
+-    });
+-    req.end(body);
++export async function quoteTax(request: { country: string; amountCents: number }): Promise<TaxQuote> {
++  const response = await callService('taxrate', new URL('/v1/quotes', config.taxrateUrl).href, {
++    method: 'POST',
++    headers: { 'Content-Type': 'application/json' },
++    body: JSON.stringify(request),
+   });
++  if (!response.ok) throw new Error(`TaxRate responded ${response.status}: ${await response.text()}`);
++  return (await response.json()) as TaxQuote;
+ }
+diff --git a/incidents/004-slow-checkout/app/src/platform/http-client.ts b/incidents/004-slow-checkout/app/src/platform/http-client.ts
+index 9237c93..af8d173 100644
+--- a/incidents/004-slow-checkout/app/src/platform/http-client.ts
++++ b/incidents/004-slow-checkout/app/src/platform/http-client.ts
+@@ -1,7 +1,7 @@
+ import { Histogram } from 'prom-client';
+ import { registry } from '../telemetry/metrics.ts';
+ 
+-export const outboundDuration = new Histogram({
++const outboundDuration = new Histogram({
+   name: 'http_client_request_duration_seconds',
+   help: 'Duration of HTTP calls to other services, by peer and response status ("error" when no response came back).',
+   labelNames: ['peer', 'method', 'status_code'] as const,

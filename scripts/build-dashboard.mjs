@@ -87,6 +87,9 @@ ts('Memory', 'V8 heap and process resident memory. The container is limited to 5
 ts('Garbage collection', 'Share of time spent in GC, by kind.', [
   ['sum by (kind) (rate(nodejs_gc_duration_seconds_sum{job="api"}[$__rate_interval]))', '{{kind}}'],
 ], { x: 12, unit: 'percentunit', stack: true });
+ts('Active libuv resources, by type', 'process.getActiveResourcesInfo() at each scrape: sockets, timers, and pending requests such as DNS lookups (GetAddrInfoReqWrap) or file system calls (FSReqCallback).', [
+  ['sum by (type) (nodejs_active_resources{job="api"})', '{{type}}'],
+], { w: 24 });
 
 row('Database (PostgreSQL)');
 panels.push({

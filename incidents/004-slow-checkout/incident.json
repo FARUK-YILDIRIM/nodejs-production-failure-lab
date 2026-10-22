@@ -1,0 +1,73 @@
+{
+  "id": "004",
+  "title": "Slow checkout",
+  "difficulty": 2,
+  "estimatedTime": "45–90 min",
+  "summary": "Checkout takes seconds while product pages stay fast, and the API is barely using its CPU.",
+  "alert": "[FIRING] CheckoutSlow: p95 of POST /api/orders is above 1 s",
+  "submit": {
+    "questions": [
+      {
+        "id": "waiting",
+        "type": "choice",
+        "prompt": "What is checkout spending its time waiting for?",
+        "choices": [
+          { "id": "db", "label": "Database queries" },
+          { "id": "taxrate", "label": "TaxRate computing the quotes" },
+          { "id": "dns", "label": "DNS lookups of TaxRate's host name" },
+          { "id": "event-loop", "label": "The event loop, blocked by JavaScript" },
+          { "id": "pool", "label": "A free database connection" },
+          { "id": "tls", "label": "TLS handshakes" }
+        ],
+        "answers": ["edaf0d374e6a8637f5827f0e431edb2c67f56c6b07693de63847273d445fe88a"]
+      },
+      {
+        "id": "queueing",
+        "type": "choice",
+        "prompt": "Why do those waits pile up instead of running in parallel?",
+        "choices": [
+          { "id": "threadpool", "label": "They run on libuv's thread pool, where only a couple can run at once" },
+          { "id": "single-thread", "label": "JavaScript is single-threaded, so they run one at a time" },
+          { "id": "rate-limit", "label": "TaxRate rate-limits the API" },
+          { "id": "ports", "label": "The container runs out of ephemeral ports" },
+          { "id": "pool-size", "label": "The database pool only has 10 connections" }
+        ],
+        "answers": ["3bc8c8daa2f45bbf9209bc10ec289d06879bb654e98bd9cf25d9b994f611acfe"]
+      },
+      {
+        "id": "cause",
+        "type": "choice",
+        "prompt": "Why does the API need TaxRate's address so often?",
+        "choices": [
+          { "id": "no-reuse", "label": "Every quote opens a new connection instead of reusing one" },
+          { "id": "ttl", "label": "TaxRate's DNS records have a very short TTL" },
+          { "id": "retries", "label": "Failed quotes are retried several times" },
+          { "id": "per-item", "label": "The API asks for one quote per line item" },
+          { "id": "healthcheck", "label": "A health check resolves TaxRate every second" }
+        ],
+        "answers": ["1b5f12a4d5f63b22dcf8fdf453ae8c45383e6fd033a3b97c0c41b7f45e1920a9"]
+      }
+    ]
+  },
+  "verify": {
+    "warmupSeconds": 15,
+    "durationSeconds": 60,
+    "slos": [
+      {
+        "label": "Checkout p95",
+        "metric": "http_req_duration{journey:checkout}",
+        "stat": "p(95)",
+        "max": 400,
+        "unit": "ms"
+      },
+      {
+        "label": "Catalog p95",
+        "metric": "http_req_duration{journey:catalog}",
+        "stat": "p(95)",
+        "max": 250,
+        "unit": "ms"
+      },
+      { "label": "Error rate", "metric": "http_req_failed", "stat": "rate", "max": 0.005, "unit": "ratio" }
+    ]
+  }
+}

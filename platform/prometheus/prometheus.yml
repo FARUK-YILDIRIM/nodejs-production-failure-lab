@@ -12,7 +12,7 @@ scrape_configs:
   # run simply produce no target. Replicas named `api-1`, `api-2`… share job="api".
   - job_name: services
     dns_sd_configs:
-      - names: [api, api-1, api-2, worker, mailwave, payments, recommendations]
+      - names: [api, api-1, api-2, worker, mailwave, taxrate, payments, recommendations]
         type: A
         port: 9464
         refresh_interval: 5s
