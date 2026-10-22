@@ -17,5 +17,5 @@
     "noImplicitOverride": true,
     "skipLibCheck": true
   },
-  "include": ["cli/src", "scripts", "incidents/*/checks.ts"]
+  "include": ["cli/src", "scripts", "incidents/*/checks.ts", "incidents/*/services/**/*.ts"]
 }

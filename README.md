@@ -48,7 +48,8 @@ Optional, for editor IntelliSense in the service code: `npm install` in the inci
 |---|---|---|---|
 | 001 | [Latency spike](incidents/001-latency-spike/README.md) | ★☆☆ | ✅ playable |
 | 002 | [Random restarts](incidents/002-random-restarts/README.md) | ★☆☆ | ✅ playable |
-| 003 | Error bursts | ★☆☆ | 🛠 next |
+| 003 | [Error bursts](incidents/003-error-bursts/README.md) | ★☆☆ | ✅ playable |
+| 004 | Slow checkout | ★★☆ | 🛠 next |
 
 Incidents are named after their **symptoms**, never their causes, and difficulty doesn't tell you the category: real incidents don't arrive labeled "database problem". The longer roadmap covers the Node.js runtime, PostgreSQL, distributed systems (timeouts, retries, circuit breakers), messaging and Kafka, and platform limits.
 

@@ -1,0 +1,70 @@
+{
+  "id": "003",
+  "title": "Error bursts",
+  "difficulty": 1,
+  "estimatedTime": "30–45 min",
+  "summary": "Every minute or so the API fails a burst of requests, then recovers on its own.",
+  "alert": "[FIRING] ApiHighErrorRate: more than 1% of shopflow-api requests are failing",
+  "submit": {
+    "questions": [
+      {
+        "id": "exit",
+        "type": "choice",
+        "prompt": "Why does the API process exit?",
+        "choices": [
+          { "id": "oom", "label": "It runs out of heap memory" },
+          { "id": "unhandled", "label": "A promise rejection that nothing handles" },
+          { "id": "sigterm", "label": "The container runtime stops it (SIGTERM)" },
+          { "id": "healthcheck", "label": "It fails its health checks and gets killed" },
+          { "id": "native", "label": "A crash in a native module (segmentation fault)" },
+          { "id": "exit", "label": "The code calls process.exit()" }
+        ],
+        "answers": ["0437a844af373187ab7224a5172c877eb77b7959d64628982e463c17e743cc5f"]
+      },
+      {
+        "id": "failure",
+        "type": "choice",
+        "prompt": "Which failure sets it off?",
+        "choices": [
+          { "id": "email", "label": "The email provider answering with an error" },
+          { "id": "db", "label": "A database error while saving the order" },
+          { "id": "telemetry", "label": "The trace exporter failing to reach Jaeger" },
+          { "id": "validation", "label": "Invalid input in an order" },
+          { "id": "timeout", "label": "A request timing out at the proxy" }
+        ],
+        "answers": ["959037dbfefa720d6bb235e4a8f3a5ed73f9c4930acbb5bd4a96d1d66c80228a"]
+      },
+      {
+        "id": "endpoint",
+        "type": "endpoint",
+        "prompt": "Requests to which endpoint lead to the crashes?",
+        "hint": "e.g. GET /api/something",
+        "answers": [
+          "dd0cc4a14c7e603b94a596d935d993eecb734f3aba8bdc345e0414b4d8386ad6",
+          "306bd3bdf2ef47018e511c9d8f770dece1ae7b1877bfa7ed0bbc0c9787e5be88"
+        ]
+      }
+    ]
+  },
+  "verify": {
+    "warmupSeconds": 15,
+    "durationSeconds": 60,
+    "slos": [
+      { "label": "Error rate", "metric": "http_req_failed", "stat": "rate", "max": 0.005, "unit": "ratio" },
+      {
+        "label": "Checkout p95",
+        "metric": "http_req_duration{journey:checkout}",
+        "stat": "p(95)",
+        "max": 400,
+        "unit": "ms"
+      },
+      {
+        "label": "Restarts",
+        "source": "prometheus",
+        "query": "changes(process_start_time_seconds{job=\"api\"}[$range])",
+        "max": 0,
+        "unit": "count"
+      }
+    ]
+  }
+}

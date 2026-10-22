@@ -7,10 +7,21 @@ rule_files:
   - /etc/prometheus/rules/*.yml
 
 scrape_configs:
-  # The incident's API process (prom-client).
-  - job_name: api
-    static_configs:
-      - targets: ["api:9464"]
+  # Every service of every incident exposes Prometheus metrics on :9464.
+  # Names are resolved through Docker's DNS, so services an incident doesn't
+  # run simply produce no target. Replicas named `api-1`, `api-2`… share job="api".
+  - job_name: services
+    dns_sd_configs:
+      - names: [api, api-1, api-2, worker, mailwave, payments, recommendations]
+        type: A
+        port: 9464
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: [__meta_dns_name]
+        regex: '(.+?)(-\d+)?'
+        target_label: job
+      - source_labels: [__meta_dns_name]
+        target_label: instance
 
   # The edge proxy: latency as experienced by clients.
   - job_name: traefik

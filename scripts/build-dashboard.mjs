@@ -58,6 +58,14 @@ ts('Database connection pool', 'Connections held by the pg pool (max 10) and req
   ['db_pool_connections{job="api",state="waiting"}', 'waiting'],
 ], { x: 12 });
 
+row('Calls to other services (measured by the API)');
+ts('Calls per second, by service and status', 'Outbound HTTP calls from the API to other services. "error" means no response came back (connection refused, reset, timeout).', [
+  ['sum by (peer, status_code) (rate(http_client_request_duration_seconds_count{job="api"}[$__rate_interval]))', '{{peer}} {{status_code}}'],
+], { unit: 'reqps', newRow: false });
+ts('Latency of calls to other services (p95)', 'How long the API waits for each service to answer.', [
+  ['histogram_quantile(0.95, sum by (le, peer) (rate(http_client_request_duration_seconds_bucket{job="api"}[$__rate_interval])))', '{{peer}}'],
+], { x: 12, unit: 's' });
+
 row('Node.js runtime');
 ts('CPU', 'CPU time used by the API process, in cores. The container is limited to 1 core.', [
   ['rate(process_cpu_seconds_total{job="api"}[$__rate_interval])', 'cpu'],
