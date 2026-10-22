@@ -1,0 +1,175 @@
+diff --git a/incidents/008-flash-sale-timeouts/app/src/orders/orders.repository.ts b/incidents/008-flash-sale-timeouts/app/src/orders/orders.repository.ts
+index 7bda14e..c78609e 100644
+--- a/incidents/008-flash-sale-timeouts/app/src/orders/orders.repository.ts
++++ b/incidents/008-flash-sale-timeouts/app/src/orders/orders.repository.ts
+@@ -181,19 +181,28 @@ export async function redeemCoupon(code: string, client: pg.PoolClient): Promise
+   await query('coupons.redeem', 'UPDATE coupons SET redemptions = redemptions + 1 WHERE code = $1', [code], client);
+ }
+ 
+-/** Locks the products' rows (in id order, to avoid deadlocks) and returns their stock. */
+-export async function lockStock(productIds: number[], client: pg.PoolClient): Promise<Map<number, number>> {
+-  const rows = await query<{ id: number; stock: number }>(
+-    'products.lock-stock',
+-    'SELECT id, stock FROM products WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE',
+-    [productIds],
++/**
++ * Takes `quantity` units if at least that many are left. The row lock lasts only
++ * until the surrounding transaction commits, a few milliseconds later.
++ */
++export async function reserveStock(item: { productId: number; quantity: number }, client: pg.PoolClient): Promise<boolean> {
++  const rows = await query(
++    'products.reserve-stock',
++    'UPDATE products SET stock = stock - $2 WHERE id = $1 AND stock >= $2 RETURNING id',
++    [item.productId, item.quantity],
+     client,
+   );
+-  return new Map(rows.map((row) => [row.id, row.stock]));
++  return rows.length > 0;
+ }
+ 
+-export async function decrementStock(items: { productId: number; quantity: number }[], client: pg.PoolClient): Promise<void> {
+-  for (const item of items) {
+-    await query('products.decrement-stock', 'UPDATE products SET stock = stock - $2 WHERE id = $1', [item.productId, item.quantity], client);
+-  }
++export async function findCoupon(code: string): Promise<Coupon | undefined> {
++  const [coupon] = await query<Coupon>(
++    'coupons.by-code',
++    `SELECT code, percent_off AS "percentOff", expires_at AS "expiresAt",
++            max_redemptions AS "maxRedemptions", redemptions
++       FROM coupons
++      WHERE code = $1`,
++    [code],
++  );
++  return coupon;
+ }
+diff --git a/incidents/008-flash-sale-timeouts/app/src/orders/orders.service.ts b/incidents/008-flash-sale-timeouts/app/src/orders/orders.service.ts
+index 289feed..18aa2c6 100644
+--- a/incidents/008-flash-sale-timeouts/app/src/orders/orders.service.ts
++++ b/incidents/008-flash-sale-timeouts/app/src/orders/orders.service.ts
+@@ -1,6 +1,6 @@
+ import { randomUUID } from 'node:crypto';
+ import { Counter } from 'prom-client';
+-import { authorizePayment } from '../checkout/payments.ts';
++import { authorizePayment, voidPayment } from '../checkout/payments.ts';
+ import { quoteTax } from '../checkout/tax.ts';
+ import { sendOrderConfirmation } from '../notifications/order-confirmation.ts';
+ import { transaction } from '../platform/db.ts';
+@@ -10,15 +10,15 @@ import { formatMoney } from '../shared/money.ts';
+ import { positiveInt } from '../shared/validation.ts';
+ import { registry } from '../telemetry/metrics.ts';
+ import {
+-  decrementStock,
++  findCoupon,
+   findCustomer,
+   findOrder,
+   findPrices,
+   insertOrder,
+   listOrderItems,
+   lockCoupon,
+-  lockStock,
+   redeemCoupon,
++  reserveStock,
+   type Coupon,
+ } from './orders.repository.ts';
+ 
+@@ -81,49 +81,59 @@ export async function placeOrder(input: NewOrder) {
+   });
+   const subtotalCents = items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0);
+ 
+-  // One transaction for the coupon and the order: the coupon row stays locked
+-  // until the order is written, so a limited coupon can't be used twice.
+-  // transaction() rolls back and returns the connection to the pool on every
+-  // path, including the early "invalid coupon" exit.
+-  const orderId = await transaction(async (client) => {
+-    // Lock the products being bought until the order is written: two customers
+-    // can never both get the last unit of a doorbuster.
+-    const stock = await lockStock([...new Set(items.map((item) => item.productId))], client);
+-    for (const item of items) {
+-      if ((stock.get(item.productId) ?? 0) < item.quantity) throw conflict(`product ${item.productId} is out of stock`);
+-    }
+-
+-    let discountCents = 0;
+-    if (input.couponCode) {
+-      const coupon = await lockCoupon(input.couponCode, client);
+-      if (!coupon || !isRedeemable(coupon)) throw badRequest(`coupon ${input.couponCode} is not valid`);
+-      discountCents = Math.round((subtotalCents * coupon.percentOff) / 100);
+-      await redeemCoupon(coupon.code, client);
+-    }
+-
+-    const { taxCents } = await quoteTax({ country: customer.country, amountCents: subtotalCents - discountCents });
+-    const totalCents = subtotalCents - discountCents + taxCents;
+-
+-    // Charge while the stock is reserved; a declined card rolls everything back.
+-    const authorization = await authorizePayment({
+-      amountCents: totalCents,
+-      paymentToken: input.paymentToken,
+-      idempotencyKey: randomUUID(),
++  // Price the order first, without taking any lock: the coupon is only read here,
++  // and redeemed for real when the order is written.
++  let discountCents = 0;
++  if (input.couponCode) {
++    const coupon = await findCoupon(input.couponCode);
++    if (!coupon || !isRedeemable(coupon)) throw badRequest(`coupon ${input.couponCode} is not valid`);
++    discountCents = Math.round((subtotalCents * coupon.percentOff) / 100);
++  }
++  const { taxCents } = await quoteTax({ country: customer.country, amountCents: subtotalCents - discountCents });
++  const totalCents = subtotalCents - discountCents + taxCents;
++
++  // The slow part (a few hundred milliseconds at the card network) happens
++  // before any row is locked, so it can't make other checkouts wait.
++  const authorization = await authorizePayment({
++    amountCents: totalCents,
++    paymentToken: input.paymentToken,
++    idempotencyKey: randomUUID(),
++  });
++
++  let orderId: number;
++  try {
++    // Locks are now held for milliseconds: take the stock only where enough is
++    // left (in product id order, so concurrent checkouts can't deadlock),
++    // redeem the coupon, write the order.
++    orderId = await transaction(async (client) => {
++      for (const item of [...items].sort((a, b) => a.productId - b.productId)) {
++        if (!(await reserveStock(item, client))) throw conflict(`product ${item.productId} is out of stock`);
++      }
++      if (input.couponCode) {
++        const coupon = await lockCoupon(input.couponCode, client);
++        if (!coupon || !isRedeemable(coupon)) throw badRequest(`coupon ${input.couponCode} is not valid`);
++        await redeemCoupon(coupon.code, client);
++      }
++      return insertOrder(
++        {
++          customerId: input.customerId,
++          totalCents,
++          taxCents,
++          discountCents,
++          couponCode: input.couponCode ?? null,
++          paymentId: authorization.id,
++          items,
++        },
++        client,
++      );
+     });
+-    await decrementStock(items, client);
+-    return insertOrder(
+-      {
+-        customerId: input.customerId,
+-        totalCents,
+-        taxCents,
+-        discountCents,
+-        couponCode: input.couponCode ?? null,
+-        paymentId: authorization.id,
+-        items,
+-      },
+-      client,
++  } catch (err) {
++    // Nothing was sold: release the hold on the customer's card.
++    await voidPayment(authorization.id).catch((voidErr: unknown) =>
++      logger.error({ err: voidErr, authorizationId: authorization.id }, 'could not void the card authorization'),
+     );
+-  });
++    throw err;
++  }
+ 
+   const order = await getOrder(orderId);
+   if (!order) throw new Error(`order ${orderId} vanished after insert`);

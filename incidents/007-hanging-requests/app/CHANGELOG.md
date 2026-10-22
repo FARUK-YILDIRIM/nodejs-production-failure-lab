@@ -2,11 +2,11 @@
 
 All notable changes to `shopflow-api`. Deployed to production by the release pipeline after merge.
 
-## 2.22.0 — 2026-10-20
+## 2.22.0 — 2026-10-19
 
 - feat(checkout): coupon codes; a coupon is locked while its order is written, so limited coupons can't be over-redeemed (#655)
 
-## 2.21.2 — 2026-10-17
+## 2.21.2 — 2026-10-16
 
 - fix(db): don't fail checkouts with "timeout exceeded when trying to connect" when the pool is busy for more than 5 s; wait for a connection instead (#649)
 

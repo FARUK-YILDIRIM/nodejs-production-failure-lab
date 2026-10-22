@@ -1,0 +1,82 @@
+{
+  "id": "008",
+  "title": "Flash sale timeouts",
+  "difficulty": 3,
+  "estimatedTime": "60–90 min",
+  "summary": "Black Friday: checkout takes seconds or times out, and the rest of the site slows down with it.",
+  "alert": "[FIRING] CheckoutSlow: p95 of POST /api/orders is above 1 s (currently ~8 s)",
+  "submit": {
+    "questions": [
+      {
+        "id": "waiting",
+        "type": "choice",
+        "prompt": "What are the slow checkouts waiting for, inside the database?",
+        "choices": [
+          { "id": "row-locks", "label": "Row locks on the products being bought" },
+          { "id": "cpu", "label": "CPU time on the database" },
+          { "id": "disk", "label": "Disk writes of new orders" },
+          { "id": "coupon-locks", "label": "Row locks on coupons" },
+          { "id": "vacuum", "label": "Autovacuum on the orders table" }
+        ],
+        "answers": ["2f2509b8558621a532554f1cd0fe0887a481354591a9288a34453c1e3ca0896a"]
+      },
+      {
+        "id": "holder",
+        "type": "choice",
+        "prompt": "What is the transaction that holds those locks doing meanwhile?",
+        "choices": [
+          { "id": "payment", "label": "Waiting for the card authorization from PayFlow" },
+          { "id": "tax", "label": "Waiting for TaxRate" },
+          { "id": "query", "label": "Running a slow query" },
+          { "id": "email", "label": "Sending the confirmation email" },
+          { "id": "nothing", "label": "Nothing: it was abandoned and never committed" }
+        ],
+        "answers": ["e3e6a7e3c9e47a3e817080f2c38ea9636d557366b3037d2f6de79f865aeaffae"]
+      },
+      {
+        "id": "why-now",
+        "type": "choice",
+        "prompt": "Why does it only hurt during the sale?",
+        "choices": [
+          {
+            "id": "hot-rows",
+            "label": "Most orders contain one of three doorbusters, so they compete for the same rows"
+          },
+          { "id": "volume", "label": "Twice the usual order volume overloads the database" },
+          { "id": "payflow-slow", "label": "PayFlow is slower than usual on Black Friday" },
+          { "id": "coupons", "label": "More customers use coupons" },
+          { "id": "pool", "label": "The connection pool is too small for Black Friday" }
+        ],
+        "answers": ["24d4318f268179dc4926e7cfe2b5a0bb21e28d3c4412559168550adfc0920e01"]
+      }
+    ]
+  },
+  "verify": {
+    "warmupSeconds": 15,
+    "durationSeconds": 60,
+    "slos": [
+      {
+        "label": "Checkout p95",
+        "metric": "http_req_duration{journey:checkout}",
+        "stat": "p(95)",
+        "max": 1000,
+        "unit": "ms"
+      },
+      {
+        "label": "Catalog p95",
+        "metric": "http_req_duration{journey:catalog}",
+        "stat": "p(95)",
+        "max": 250,
+        "unit": "ms"
+      },
+      { "label": "Error rate", "metric": "http_req_failed", "stat": "rate", "max": 0.005, "unit": "ratio" },
+      {
+        "label": "Requests waiting for a DB connection (max)",
+        "source": "prometheus",
+        "query": "max_over_time(db_pool_connections{job=\"api\",state=\"waiting\"}[$range])",
+        "max": 5,
+        "unit": "count"
+      }
+    ]
+  }
+}

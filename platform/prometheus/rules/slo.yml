@@ -2,16 +2,18 @@
 groups:
   - name: shopflow-slo
     rules:
+      # Reads only: placing an order includes a card authorization (a few hundred
+      # milliseconds at the card network) and has its own alert, CheckoutSlow.
       - alert: ApiHighLatencyP95
         expr: |
           histogram_quantile(0.95,
-            sum by (le) (rate(traefik_service_request_duration_seconds_bucket{service="api@file"}[2m]))
+            sum by (le) (rate(traefik_service_request_duration_seconds_bucket{service="api@file", method="GET"}[2m]))
           ) > 0.5
         for: 2m
         labels:
           severity: page
         annotations:
-          summary: "API p95 latency at the edge is above 500 ms"
+          summary: "API p95 latency at the edge is above 500 ms (GET requests)"
           description: "p95 = {{ $value | humanizeDuration }} over the last 2 minutes."
 
       - alert: ApiHighErrorRate
