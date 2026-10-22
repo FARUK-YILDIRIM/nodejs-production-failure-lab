@@ -2,17 +2,21 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { composeOrFail } from './compose.ts';
+import { rollingRestart } from './deploy.ts';
 import { sleep } from './exec.ts';
 import type { Incident, Slo } from './incidents.ts';
 import { STATE_DIR, urls } from './paths.ts';
 
-/** The same runtime signals are reported for every incident, so they don't point at any answer. */
+/**
+ * The same runtime signals are reported for every incident, so they don't point at any answer.
+ * With several instances: CPU adds up, utilization is averaged, the rest is the worst instance.
+ */
 export const RUNTIME_METRICS = [
-  { id: 'cpu', label: 'CPU (cores)', query: 'rate(process_cpu_seconds_total{job="api"}[$range])', unit: 'cores' },
-  { id: 'elu', label: 'Event loop utilization', query: 'avg_over_time(nodejs_eventloop_utilization{job="api"}[$range])', unit: 'percent' },
-  { id: 'lag', label: 'Event loop delay (max)', query: 'max_over_time(nodejs_eventloop_lag_max_seconds{job="api"}[$range])', unit: 'seconds' },
-  { id: 'heap', label: 'Heap used (max)', query: 'max_over_time(nodejs_heap_size_used_bytes{job="api"}[$range])', unit: 'bytes' },
-  { id: 'pool', label: 'DB pool waiting (max)', query: 'max_over_time(db_pool_connections{job="api",state="waiting"}[$range])', unit: 'count' },
+  { id: 'cpu', label: 'CPU (cores)', query: 'sum(rate(process_cpu_seconds_total{job="api"}[$range]))', unit: 'cores' },
+  { id: 'elu', label: 'Event loop utilization', query: 'avg(avg_over_time(nodejs_eventloop_utilization{job="api"}[$range]))', unit: 'percent' },
+  { id: 'lag', label: 'Event loop delay (max)', query: 'max(max_over_time(nodejs_eventloop_lag_max_seconds{job="api"}[$range]))', unit: 'seconds' },
+  { id: 'heap', label: 'Heap used (max)', query: 'max(max_over_time(nodejs_heap_size_used_bytes{job="api"}[$range]))', unit: 'bytes' },
+  { id: 'pool', label: 'DB pool waiting (max)', query: 'max(max_over_time(db_pool_connections{job="api",state="waiting"}[$range]))', unit: 'count' },
 ] as const;
 
 export type RuntimeMetricId = (typeof RUNTIME_METRICS)[number]['id'];
@@ -119,7 +123,11 @@ export async function measure(incident: Incident, label: string, sourceHash: str
   await k6(incident, 'warmup', warmupSeconds);
 
   const startedAt = new Date();
-  const summary = await k6(incident, 'verify', durationSeconds);
+  const { rollingRestartAt } = incident.verify;
+  const [summary] = await Promise.all([
+    k6(incident, 'verify', durationSeconds),
+    rollingRestartAt === undefined ? undefined : sleep(rollingRestartAt * 1000).then(() => rollingRestart(incident)),
+  ]);
   const endedAt = new Date();
   if (!summary) throw new Error('k6 produced no summary');
 

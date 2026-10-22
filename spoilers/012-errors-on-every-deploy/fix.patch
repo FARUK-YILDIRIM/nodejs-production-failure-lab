@@ -1,0 +1,125 @@
+diff --git a/incidents/012-errors-on-every-deploy/app/src/app.ts b/incidents/012-errors-on-every-deploy/app/src/app.ts
+index e67f971..f19f5e6 100644
+--- a/incidents/012-errors-on-every-deploy/app/src/app.ts
++++ b/incidents/012-errors-on-every-deploy/app/src/app.ts
+@@ -5,6 +5,7 @@ import { customersRouter } from './customers/customers.routes.ts';
+ import { ordersRouter } from './orders/orders.routes.ts';
+ import { errorHandler, notFoundHandler } from './platform/error-handler.ts';
+ import { healthRouter } from './platform/health.routes.ts';
++import { closeConnectionsWhileDraining } from './platform/lifecycle.ts';
+ import { requestTelemetry } from './platform/request-telemetry.ts';
+ import { reportsRouter } from './reports/reports.routes.ts';
+ 
+@@ -12,6 +13,7 @@ export function createApp(): express.Express {
+   const app = express();
+   app.disable('x-powered-by');
+ 
++  app.use(closeConnectionsWhileDraining);
+   app.use(healthRouter);
+   app.use(requestTelemetry());
+   app.use(compression());
+diff --git a/incidents/012-errors-on-every-deploy/app/src/platform/health.routes.ts b/incidents/012-errors-on-every-deploy/app/src/platform/health.routes.ts
+index 6fd8c68..26cdc8f 100644
+--- a/incidents/012-errors-on-every-deploy/app/src/platform/health.routes.ts
++++ b/incidents/012-errors-on-every-deploy/app/src/platform/health.routes.ts
+@@ -1,6 +1,7 @@
+ import express from 'express';
+ import { config } from './config.ts';
+ import { pool } from './db.ts';
++import { isDraining } from './lifecycle.ts';
+ 
+ export const healthRouter = express.Router();
+ 
+@@ -9,8 +10,12 @@ healthRouter.get('/health', (_req, res) => {
+   res.json({ status: 'ok', version: config.version });
+ });
+ 
+-/** Readiness: dependencies are reachable. */
++/** Readiness: the proxy may send requests here. Not while shutting down. */
+ healthRouter.get('/ready', async (_req, res) => {
++  if (isDraining()) {
++    res.status(503).json({ status: 'draining' });
++    return;
++  }
+   await pool.query('SELECT 1');
+   res.json({ status: 'ready' });
+ });
+diff --git a/incidents/012-errors-on-every-deploy/app/src/platform/lifecycle.ts b/incidents/012-errors-on-every-deploy/app/src/platform/lifecycle.ts
+new file mode 100644
+index 0000000..96a4e33
+--- /dev/null
++++ b/incidents/012-errors-on-every-deploy/app/src/platform/lifecycle.ts
+@@ -0,0 +1,20 @@
++import type { RequestHandler } from 'express';
++
++let draining = false;
++
++/** Shutting down: the instance still answers, but asks not to get new requests. */
++export const isDraining = () => draining;
++
++export function startDraining(): void {
++  draining = true;
++}
++
++/**
++ * While draining, every response closes its connection: the proxy then opens a
++ * new one for its next request, to an instance that isn't going away, instead of
++ * reusing a connection this instance is about to close.
++ */
++export const closeConnectionsWhileDraining: RequestHandler = (_req, res, next) => {
++  if (draining) res.set('Connection', 'close');
++  next();
++};
+diff --git a/incidents/012-errors-on-every-deploy/app/src/server.ts b/incidents/012-errors-on-every-deploy/app/src/server.ts
+index 86ec1d6..df874bd 100644
+--- a/incidents/012-errors-on-every-deploy/app/src/server.ts
++++ b/incidents/012-errors-on-every-deploy/app/src/server.ts
+@@ -1,6 +1,7 @@
+ import { createApp } from './app.ts';
+ import { config } from './platform/config.ts';
+ import { pool } from './platform/db.ts';
++import { startDraining } from './platform/lifecycle.ts';
+ import { logger } from './platform/logger.ts';
+ import { migrate } from './platform/migrations.ts';
+ import { startMetricsServer } from './telemetry/metrics.ts';
+@@ -23,20 +24,33 @@ const server = createApp().listen(config.port, (err?: Error) => {
+ server.keepAliveTimeout = 95_000;
+ server.headersTimeout = 96_000;
+ 
++// The proxy checks each instance's /ready every 2 s. Keep serving for longer than
++// that after SIGTERM, so it has stopped sending requests here before we stop
++// accepting them.
++const DRAIN_MS = 5_000;
++
+ let shuttingDown = false;
+ 
+ function shutdown(signal: NodeJS.Signals): void {
+   if (shuttingDown) return;
+   shuttingDown = true;
+-  logger.info({ signal }, 'shutting down');
++  // 1. /ready answers 503, and responses close their connections.
++  startDraining();
++  logger.info({ signal, drainMs: DRAIN_MS }, 'shutting down: draining');
+ 
+   // Docker sends SIGKILL after 10s; leave in a controlled way before that.
+-  setTimeout(() => process.exit(1), 8_000).unref();
+-
+-  server.close(() => {
+-    metricsServer.close();
+-    pool.end().finally(() => process.exit(0));
+-  });
++  setTimeout(() => process.exit(1), 9_000).unref();
++
++  // 2. Once the proxy has moved on: stop accepting connections, let the requests
++  // in flight finish, then close the database pool and exit.
++  setTimeout(() => {
++    logger.info('shutting down: closing');
++    server.close(() => {
++      metricsServer.close();
++      pool.end().finally(() => process.exit(0));
++    });
++    server.closeIdleConnections();
++  }, DRAIN_MS).unref();
+ }
+ 
+ process.on('SIGTERM', shutdown);

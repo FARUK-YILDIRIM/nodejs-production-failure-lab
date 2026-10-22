@@ -1,4 +1,8 @@
 # Edge routing: every request on :80 goes to the incident's API service.
+#
+# Incidents that run several API instances (the lab sets LAB_API_REPLICAS, e.g.
+# "api-1,api-2") get a load balancer that checks each instance's readiness
+# (GET /ready) every 2 s, and only sends requests to the ones that pass.
 http:
   routers:
     api:
@@ -9,5 +13,16 @@ http:
   services:
     api:
       loadBalancer:
+{{- with env "LAB_API_REPLICAS" }}
+        healthCheck:
+          path: /ready
+          interval: 2s
+          timeout: 1s
+        servers:
+{{- range splitList "," . }}
+          - url: http://{{ . }}:3000
+{{- end }}
+{{- else }}
         servers:
           - url: http://api:3000
+{{- end }}

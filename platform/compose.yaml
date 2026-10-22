@@ -21,6 +21,9 @@ services:
       - --tracing.otlp.http.endpoint=http://jaeger:4318/v1/traces
       - --ping=true
       - --log.level=WARN
+    environment:
+      # Set by the lab for incidents that run several API instances (dynamic.yaml).
+      LAB_API_REPLICAS: ${LAB_API_REPLICAS:-}
     volumes:
       - ./traefik/dynamic.yaml:/etc/traefik/dynamic.yaml:ro
     ports:

@@ -6,7 +6,7 @@ export async function logs(args: string[]): Promise<void> {
   const incident = incidentFromArgs([]);
   await ensureDocker();
   await ensureRunning(incident);
-  await compose(incident, ['logs', '--follow', '--tail', '100', args[0] ?? incident.appServices[0] ?? 'api'], { inherit: true });
+  await compose(incident, ['logs', '--follow', '--tail', '100', ...(args[0] ? [args[0]] : incident.appServices)], { inherit: true });
 }
 
 export async function shell(args: string[]): Promise<void> {

@@ -39,7 +39,13 @@ export interface IncidentManifest {
   summary: string;
   alert: string;
   submit: { questions: Question[] };
-  verify: { warmupSeconds: number; durationSeconds: number; slos: Slo[] };
+  verify: {
+    warmupSeconds: number;
+    durationSeconds: number;
+    slos: Slo[];
+    /** Seconds into the measured run at which the app's instances are restarted one by one. */
+    rollingRestartAt?: number;
+  };
   /** Compose services built from app/ that `./lab deploy` restarts. Default: ["api"]. */
   services?: string[];
   /**

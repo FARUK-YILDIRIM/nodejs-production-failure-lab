@@ -69,6 +69,8 @@ If the fix changes the database, set `"resetDatabase": true`, end the seed with 
 
 If a stand-in service keeps state that would leak from one run into the next (a queue, a cache), list it in `"resetServices"`: `verify` and `reset` restart it before each run.
 
+To run the API as several instances behind the edge proxy, declare them as separate Compose services (`api-1`, `api-2`; only the first one builds the image, the others use it with `pull_policy: never`) and list them in `"services"`. Deploys then replace them one at a time. Set `verify.rollingRestartAt` to restart them during the measurement.
+
 ## 5. Functional checks (`checks.ts`)
 
 Every deterministic endpoint gets a golden SHA-256 of its response body, taken from the broken service (it is functionally correct, just slow or fragile):

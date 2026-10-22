@@ -1,0 +1,75 @@
+{
+  "id": "012",
+  "title": "Errors on every deploy",
+  "difficulty": 2,
+  "estimatedTime": "45–75 min",
+  "summary": "Since the API runs on two instances with rolling deploys, every deploy still causes a burst of errors.",
+  "alert": "[RECURRING] Every deploy: about a hundred requests fail with 502 at the edge",
+  "submit": {
+    "questions": [
+      {
+        "id": "when",
+        "type": "choice",
+        "prompt": "When exactly do the 502s happen?",
+        "choices": [
+          {
+            "id": "stopping",
+            "label": "Between the moment an instance is told to stop and the moment the proxy stops sending it requests"
+          },
+          { "id": "starting", "label": "While a new instance starts, before it is ready" },
+          { "id": "both", "label": "When both instances are down at the same time" },
+          { "id": "migrations", "label": "While database migrations run" },
+          { "id": "cold-cache", "label": "While the new instance's caches are empty" }
+        ],
+        "answers": ["ac501a5f636fbb5f7050ed1416964c1868f374398ab3bda3fb5d7a6f5795aebb"]
+      },
+      {
+        "id": "sigterm",
+        "type": "choice",
+        "prompt": "What does an instance do wrong when it receives SIGTERM?",
+        "choices": [
+          {
+            "id": "closes-first",
+            "label": "It stops accepting connections at once, while its /ready still passes and the proxy still sends it requests"
+          },
+          { "id": "drops-in-flight", "label": "It exits without finishing the requests in flight" },
+          { "id": "ignores", "label": "It ignores SIGTERM and gets killed after 10 s" },
+          { "id": "pool-first", "label": "It closes the database pool before the server" },
+          { "id": "slow-exit", "label": "It takes too long to exit" }
+        ],
+        "answers": ["1718d4ee68d3e55144d7bafe7a44b0370f0041c02b7fda0ebbaa98df145e3809"]
+      },
+      {
+        "id": "drain",
+        "type": "choice",
+        "prompt": "How long must an instance keep serving after SIGTERM?",
+        "choices": [
+          {
+            "id": "check-interval",
+            "label": "Longer than the proxy's readiness check interval, with /ready failing meanwhile"
+          },
+          { "id": "in-flight", "label": "Just until the requests in flight are done" },
+          { "id": "grace", "label": "The full 10 s of Docker's grace period" },
+          { "id": "keep-alive", "label": "As long as its keep-alive timeout (95 s)" },
+          { "id": "none", "label": "Not at all: the proxy should retry" }
+        ],
+        "answers": ["bb520ce337631f81880a59ee92bfea5dbef523ac282619058de2ea957fc12ed5"]
+      }
+    ]
+  },
+  "verify": {
+    "warmupSeconds": 15,
+    "durationSeconds": 60,
+    "rollingRestartAt": 15,
+    "slos": [
+      {
+        "label": "Server errors (5xx) during a rolling restart",
+        "metric": "server_errors",
+        "stat": "passes",
+        "max": 0,
+        "unit": "count"
+      }
+    ]
+  },
+  "services": ["api-1", "api-2"]
+}

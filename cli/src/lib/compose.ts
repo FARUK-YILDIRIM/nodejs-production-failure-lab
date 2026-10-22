@@ -2,8 +2,24 @@ import { LabError } from './errors.ts';
 import { run, type RunOptions } from './exec.ts';
 import type { Incident } from './incidents.ts';
 
-export function compose(incident: Incident, args: string[], options?: RunOptions) {
-  return run('docker', ['compose', '-f', incident.composeFile, ...args], options);
+export function compose(incident: Incident, args: string[], options: RunOptions = {}) {
+  // The edge proxy load-balances over the API's instances when there are several.
+  const replicas = incident.appServices.length > 1 ? incident.appServices.join(',') : '';
+  return run('docker', ['compose', '-f', incident.composeFile, ...args], {
+    ...options,
+    env: { LAB_API_REPLICAS: replicas, ...options.env },
+  });
+}
+
+/** Waits until Docker reports the service's container as healthy. */
+export async function waitHealthy(incident: Incident, service: string, timeoutMs = 120_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const result = await compose(incident, ['ps', '--format', '{{.Health}}', service]);
+    if (result.stdout.trim() === 'healthy') return;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new LabError(`${service} did not become healthy within ${Math.round(timeoutMs / 1000)}s`);
 }
 
 /** Like compose(), but turns a non-zero exit into a LabError that includes Docker's output. */

@@ -36,6 +36,8 @@ node-production-failure-lab/
 
 The service's `src/` is bind-mounted into its container, so `./lab deploy` only has to recreate the container to run the student's working copy. Dependencies are baked into the image; `./lab deploy --build` rebuilds it.
 
+Most incidents run the API as one container, `api`. An incident can run several instances instead (`"services": ["api-1", "api-2"]`): the CLI then tells the edge proxy (`LAB_API_REPLICAS`), which load-balances over them and checks each one's `GET /ready` every 2 s, and `./lab deploy` replaces them one at a time, each healthy before the next.
+
 On first start, the CLI snapshots the original `src/` into `.lab/snapshots/` (from git `HEAD` when the incident is committed). The snapshot is the reference for "before" measurements and for `./lab reset`.
 
 Some fixes change the database (an index, a column). Those incidents set `"resetDatabase": true`: their seed ends by copying the database to `shop_pristine` (`db/04-template.sh`), and `verify` and `reset` recreate `shop` from that template in seconds before deploying. The service applies its own SQL migrations from `src/migrations` at startup, so a database fix is part of the code like any other.
@@ -63,7 +65,9 @@ The service's instrumentation is loaded with `node --import ./src/telemetry/regi
 2. **Functional checks** (`checks.ts`): golden SHA-256 hashes of deterministic responses, plus behavioral checks for writes and validation. A fix must not change what the API returns. Checks retry while the API is restarting, and stop early if it stops answering altogether.
 3. **Baseline**, once per original snapshot: deploy the original code, warm up, run the load, collect metrics; then redeploy the working copy. The result is cached in `.lab/runs/`.
 4. **Measurement**: k6 warms up, then runs the standard traffic mix for the incident's duration. Client-side percentiles come from k6's summary; server-side numbers come from Prometheus for exactly that window.
-5. **Verdict**: every SLO in `incident.json` must be met. An SLO reads either a client-side statistic from the k6 summary (`metric` + `stat`) or, with `"source": "prometheus"`, a PromQL query evaluated over exactly the measured window (`$range`), e.g. restarts or live-heap growth.
+5. **Verdict**: every SLO in `incident.json` must be met. An SLO reads a client-side statistic from the k6 summary (`metric` + `stat`), a PromQL query evaluated over exactly the measured window (`"source": "prometheus"`, `$range`), e.g. restarts or live-heap growth, or a SQL query on the incident's database (`"source": "sql"`, `$start`/`$end`), e.g. duplicate rows.
+
+Incidents about deploys set `verify.rollingRestartAt`: that many seconds into the measurement, the CLI restarts the API's instances one by one, as a deploy would, while the load keeps running.
 
 The load model uses k6's `constant-arrival-rate` executor. New requests keep arriving while the service stalls, as real users do. A closed model (a fixed number of connections waiting for responses) would stop sending during a stall and report a far rosier tail.
 
