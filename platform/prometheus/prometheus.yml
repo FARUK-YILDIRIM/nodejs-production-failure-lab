@@ -23,6 +23,14 @@ scrape_configs:
       - source_labels: [__meta_dns_name]
         target_label: instance
 
+  # Topics and consumer groups of the incident's message broker, if it has one.
+  - job_name: kafka
+    dns_sd_configs:
+      - names: [kafka-exporter]
+        type: A
+        port: 9308
+        refresh_interval: 5s
+
   # The incident's PostgreSQL, through postgres-exporter.
   - job_name: postgres
     static_configs:

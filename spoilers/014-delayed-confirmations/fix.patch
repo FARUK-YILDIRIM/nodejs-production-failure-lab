@@ -1,0 +1,63 @@
+diff --git a/incidents/014-delayed-confirmations/app/src/worker.ts b/incidents/014-delayed-confirmations/app/src/worker.ts
+index 341fc50..d87cd85 100644
+--- a/incidents/014-delayed-confirmations/app/src/worker.ts
++++ b/incidents/014-delayed-confirmations/app/src/worker.ts
+@@ -1,5 +1,6 @@
+ // The worker: reads the order-events topic and sends each order's confirmation
+ // email through MailWave. Runs as its own service, from the same code as the API.
++import type { KafkaMessage } from 'kafkajs';
+ import { Counter, Histogram } from 'prom-client';
+ import { sendOrderConfirmation } from './notifications/order-confirmation.ts';
+ import type { OrderPlaced } from './orders/order-events.ts';
+@@ -48,19 +49,41 @@ async function confirm(event: OrderPlaced): Promise<void> {
+   confirmationDelay.observe((Date.now() - Date.parse(event.placedAt)) / 1000);
+ }
+ 
++/** Handles one order event; a failure is logged, not thrown. */
++async function handle(message: KafkaMessage): Promise<void> {
++  const event = JSON.parse(message.value?.toString() ?? '{}') as OrderPlaced;
++  try {
++    await confirm(event);
++  } catch (err) {
++    // MailWave was retried already; one email isn't worth stopping the others for.
++    confirmationFailures.inc();
++    logger.error({ err, orderId: event.orderId }, 'order confirmation email could not be sent');
++  }
++}
++
++// MailWave takes ~650 ms per email: one at a time, that's 1.5 emails per second,
++// fewer than the orders coming in. Emails don't depend on each other, so send up
++// to 32 at once.
++const CONCURRENCY = 32;
++
+ await consumer.connect();
+ await consumer.subscribe({ topic: ORDER_EVENTS_TOPIC, fromBeginning: true });
+ await consumer.run({
+-  // Each message is handled when the previous one is done, and its offset committed.
+-  eachMessage: async ({ message }) => {
+-    const event = JSON.parse(message.value?.toString() ?? '{}') as OrderPlaced;
+-    try {
+-      await confirm(event);
+-    } catch (err) {
+-      // MailWave was retried already; one email isn't worth stopping the others for.
+-      confirmationFailures.inc();
+-      logger.error({ err, orderId: event.orderId }, 'order confirmation email could not be sent');
+-    }
++  eachBatchAutoResolve: false,
++  eachBatch: async ({ batch, resolveOffset, heartbeat, isRunning, isStale }) => {
++    let next = 0;
++    const sendNext = async (): Promise<void> => {
++      while (next < batch.messages.length && isRunning() && !isStale()) {
++        const message = batch.messages[next++];
++        if (message) await handle(message);
++        await heartbeat();
++      }
++    };
++    await Promise.all(Array.from({ length: CONCURRENCY }, sendNext));
++    // Offsets are committed only once every message of the batch is handled: if the
++    // worker dies halfway, the batch is read again, and MailWave's idempotency key
++    // keeps customers from getting the same email twice.
++    if (isRunning() && !isStale()) resolveOffset(batch.lastOffset());
+   },
+ });
+ logger.info({ topic: ORDER_EVENTS_TOPIC, groupId: 'order-confirmations' }, 'worker consuming');

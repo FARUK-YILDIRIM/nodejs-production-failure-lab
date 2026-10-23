@@ -1,0 +1,72 @@
+{
+  "id": "014",
+  "title": "Delayed confirmations",
+  "difficulty": 3,
+  "estimatedTime": "60–90 min",
+  "summary": "Order confirmation emails arrive later and later: minutes, then the better part of an hour.",
+  "alert": "[TICKETS] \"I paid, but got no confirmation\": 37 tickets since this morning",
+  "submit": {
+    "questions": [
+      {
+        "id": "where",
+        "type": "choice",
+        "prompt": "Where are the confirmation emails waiting?",
+        "choices": [
+          { "id": "topic", "label": "In the order-events topic: the worker reads it more slowly than orders come in" },
+          { "id": "mailwave", "label": "In MailWave's own queue" },
+          { "id": "api", "label": "In the API, which sends them in the background" },
+          { "id": "database", "label": "In the database" },
+          { "id": "spam", "label": "In customers' spam folders" }
+        ],
+        "answers": ["dd092a69aa8b1850a52d504270514e17a0439a54e376d594f9c1fa0a6f0d86ad"]
+      },
+      {
+        "id": "why-slow",
+        "type": "choice",
+        "prompt": "Why can't the worker keep up?",
+        "choices": [
+          {
+            "id": "one-at-a-time",
+            "label": "It handles one message at a time, and each one waits ~650 ms for MailWave"
+          },
+          { "id": "cpu", "label": "Its CPU is saturated" },
+          { "id": "database", "label": "Its database queries are slow" },
+          { "id": "broker", "label": "The message broker is slow" },
+          { "id": "rejected", "label": "MailWave rejects most emails, and they are retried" }
+        ],
+        "answers": ["c609f2333561153cc3feb7d74d83c961cbf4e68236e18fa5a70278a4662b1406"]
+      },
+      {
+        "id": "more-workers",
+        "type": "choice",
+        "prompt": "Would running four worker instances fix it?",
+        "choices": [
+          {
+            "id": "no-partition",
+            "label": "No: the topic has a single partition, and a partition is read by one consumer of the group at a time"
+          },
+          { "id": "yes", "label": "Yes: four times the throughput" },
+          { "id": "yes-pool", "label": "Yes, if they share a bigger database pool" },
+          { "id": "no-mailwave", "label": "No: MailWave would rate-limit them" },
+          { "id": "no-kafka", "label": "No: a topic can only have one consumer" }
+        ],
+        "answers": ["8798ab465a7ffabdf211af1650f9ef3b9ccc465c771420f15d5d5cd4b01ad5ab"]
+      }
+    ]
+  },
+  "verify": {
+    "warmupSeconds": 15,
+    "durationSeconds": 60,
+    "slos": [
+      {
+        "label": "Confirmation email delay (p95)",
+        "source": "sql",
+        "query": "SELECT coalesce(round(1000 * percentile_cont(0.95) WITHIN GROUP (ORDER BY extract(epoch FROM coalesce(confirmation_sent_at, $end) - created_at))), 0) FROM orders WHERE created_at >= $start AND created_at < $end - interval '10 seconds'",
+        "max": 5000,
+        "unit": "ms"
+      }
+    ]
+  },
+  "services": ["api-1", "api-2", "worker"],
+  "resetServices": ["redpanda", "kafka-exporter"]
+}

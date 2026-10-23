@@ -4,7 +4,8 @@ import type { Incident } from './incidents.ts';
 
 export function compose(incident: Incident, args: string[], options: RunOptions = {}) {
   // The edge proxy load-balances over the API's instances when there are several.
-  const replicas = incident.appServices.length > 1 ? incident.appServices.join(',') : '';
+  const instances = incident.appServices.filter((service) => /^api(-\d+)?$/.test(service));
+  const replicas = instances.length > 1 ? instances.join(',') : '';
   return run('docker', ['compose', '-f', incident.composeFile, ...args], {
     ...options,
     env: { LAB_API_REPLICAS: replicas, ...options.env },

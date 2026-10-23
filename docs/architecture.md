@@ -38,6 +38,8 @@ The service's `src/` is bind-mounted into its container, so `./lab deploy` only 
 
 Most incidents run the API as one container, `api`. An incident can run several instances instead (`"services": ["api-1", "api-2"]`): the CLI then tells the edge proxy (`LAB_API_REPLICAS`), which load-balances over them and checks each one's `GET /ready` every 2 s, and `./lab deploy` replaces them one at a time, each healthy before the next.
 
+The same codebase can also run as a background worker (`"services": [..., "worker"]`, started with `src/worker.ts`). Incidents with a message broker run Redpanda (Kafka API) with its data in memory, so a restart empties it, and kafka-exporter, which publishes topic offsets and consumer group lag to Prometheus.
+
 On first start, the CLI snapshots the original `src/` into `.lab/snapshots/` (from git `HEAD` when the incident is committed). The snapshot is the reference for "before" measurements and for `./lab reset`.
 
 Some fixes change the database (an index, a column). Those incidents set `"resetDatabase": true`: their seed ends by copying the database to `shop_pristine` (`db/04-template.sh`), and `verify` and `reset` recreate `shop` from that template in seconds before deploying. The service applies its own SQL migrations from `src/migrations` at startup, so a database fix is part of the code like any other.

@@ -1,0 +1,40 @@
+{
+  "name": "shopflow-api",
+  "version": "2.27.0",
+  "description": "ShopFlow e-commerce API: catalog, checkout, customer accounts and finance reports.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.11"
+  },
+  "scripts": {
+    "start": "node --import ./src/telemetry/register.ts src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.10.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.300.0",
+    "@opentelemetry/instrumentation-express": "^0.72.0",
+    "@opentelemetry/instrumentation-http": "^0.300.0",
+    "@opentelemetry/instrumentation-kafkajs": "^0.33.0",
+    "@opentelemetry/instrumentation-pg": "^0.77.0",
+    "@opentelemetry/instrumentation-pino": "^0.70.0",
+    "@opentelemetry/instrumentation-undici": "^0.34.0",
+    "@opentelemetry/sdk-node": "^0.300.0",
+    "@pyroscope/nodejs": "^0.6.5",
+    "compression": "^1.8.2",
+    "express": "^5.3.0",
+    "import-in-the-middle": "^3.5.2",
+    "kafkajs": "^2.2.4",
+    "pg": "^8.23.1",
+    "pino": "^10.4.0",
+    "prom-client": "^15.1.3"
+  },
+  "devDependencies": {
+    "@types/compression": "^1.8.1",
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.19.2",
+    "@types/pg": "^8.23.1",
+    "typescript": "^7.0.2"
+  }
+}

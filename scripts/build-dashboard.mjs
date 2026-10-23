@@ -108,13 +108,25 @@ panels.push({
 });
 y += 9;
 
+row('Queues (incidents with a message broker)');
+ts('Consumer lag, by group and topic', 'Messages written to a topic that a consumer group has not processed yet, from kafka-exporter.', [
+  ['sum by (consumergroup, topic) (kafka_consumergroup_lag)', '{{consumergroup}} on {{topic}}'],
+], { w: 8, newRow: false });
+ts('Messages per second, written and consumed', 'Written: offsets added to each topic. Consumed: offsets committed by each consumer group.', [
+  ['sum by (topic) (rate(kafka_topic_partition_current_offset{topic!~"_.*"}[$__rate_interval]))', 'written to {{topic}}'],
+  ['sum by (consumergroup, topic) (rate(kafka_consumergroup_current_offset[$__rate_interval]))', '{{consumergroup}} consumed'],
+], { w: 8, x: 8, newRow: false });
+ts('Partitions, by topic', 'A partition is consumed by one consumer of a group at a time.', [
+  ['max by (topic) (kafka_topic_partitions{topic!~"_.*"})', '{{topic}}'],
+], { w: 8, x: 16 });
+
 row('Dig deeper');
 panels.push({
   type: 'text', id: ++id, title: 'Tools', gridPos: { h: 6, w: 24, x: 0, y },
   options: { mode: 'markdown', content: [
-    '- **Traces**: [Jaeger](http://localhost:16686/search) (services `traefik` and `shopflow-api`).',
+    '- **Traces**: [Jaeger](http://localhost:16686/search) (services `traefik`, `shopflow-api`, and `shopflow-worker` where there is one).',
     '- **Profiles**: Drilldown → Profiles, service `shopflow-api` (CPU and wall-clock flame graphs, heap).',
-    '- **Logs**: `./lab logs api` (JSON, with `trace_id` on request logs).',
+    '- **Logs**: `./lab logs` for the service\'s containers (JSON, with `trace_id` on request logs), `./lab logs <service>` for any other one.',
     '- **Database**: `./lab psql`, e.g. `SELECT query, calls, mean_exec_time FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 10;`',
     '- **Node.js inspector**: chrome://inspect → Configure → `127.0.0.1:9229`, then take a CPU profile or heap snapshot.',
   ].join('\n') },
