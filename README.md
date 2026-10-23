@@ -30,7 +30,7 @@ Every incident follows the same loop: **observe → hypothesize → investigate 
 
 ## Quick start
 
-You need **Docker** (Docker Desktop with ≥ 4 GB of memory is fine), **Node.js 22.18+** (24 recommended) and **git**.
+You need **Docker** (Docker Desktop with 6 GB of memory; the later incidents run more services, up to a message broker), **Node.js 22.18+** (24 recommended) and **git**.
 
 ```bash
 git clone <this repository> node-production-failure-lab
@@ -62,7 +62,7 @@ Optional, for editor IntelliSense in the service code: `npm install` in the inci
 | 014 | [Delayed confirmations](incidents/014-delayed-confirmations/README.md) | ★★★ | ✅ playable |
 | 015 | [Stuck queue](incidents/015-stuck-queue/README.md) | ★★★ | ✅ playable |
 
-Incidents are named after their **symptoms**, never their causes, and difficulty doesn't tell you the category: real incidents don't arrive labeled "database problem". The longer roadmap covers the Node.js runtime, PostgreSQL, distributed systems (timeouts, retries, circuit breakers), messaging and Kafka, and platform limits.
+Incidents are named after their **symptoms**, never their causes, and difficulty doesn't tell you the category: real incidents don't arrive labeled "database problem". Together they cover the Node.js runtime, PostgreSQL, calls to other services (timeouts, retries, idempotency), deploys and health checks, and message queues. They follow one company, ShopFlow, through six months: each incident's code includes the fixes of the ones before it. A Kubernetes edition is on the roadmap.
 
 ## Rules of the game
 
@@ -95,7 +95,7 @@ Incidents are named after their **symptoms**, never their causes, and difficulty
 ## What's running
 
 ```
-  k6 · simulated customers (open model, ~38 req/s)
+  k6 · simulated customers (open model, 40 to 70 req/s)
           │
           ▼
   Traefik · edge proxy ─────────────────────── latency as customers see it
@@ -108,6 +108,8 @@ Incidents are named after their **symptoms**, never their causes, and difficulty
      └──────────────── Grafana ─────────────┘
 ```
 
+As ShopFlow grows, incidents add what it depends on: stand-ins for third parties (MailWave for email, TaxRate for sales tax, PayFlow for card payments) and for another team's service (Recommendations), a second API instance behind the proxy, and a worker reading a message broker (Redpanda, Kafka API). You can look at all of them; the code you fix is always the ShopFlow service.
+
 | Tool | URL |
 |---|---|
 | API (through the proxy) | http://localhost:8080 |
@@ -116,7 +118,7 @@ Incidents are named after their **symptoms**, never their causes, and difficulty
 | Jaeger | http://localhost:16686 |
 | Node.js inspector | `chrome://inspect` → `127.0.0.1:9229` |
 
-Ports are bound to `127.0.0.1` and can be changed with `LAB_PORT_API`, `LAB_PORT_GRAFANA`, `LAB_PORT_PROMETHEUS`, `LAB_PORT_JAEGER`, `LAB_PORT_PYROSCOPE` and `LAB_PORT_INSPECTOR`.
+Ports are bound to `127.0.0.1` and can be changed with `LAB_PORT_API`, `LAB_PORT_GRAFANA`, `LAB_PORT_PROMETHEUS`, `LAB_PORT_JAEGER`, `LAB_PORT_PYROSCOPE` and `LAB_PORT_INSPECTOR`, and in the incidents that have them, `LAB_PORT_MAILWAVE`, `LAB_PORT_PAYFLOW`, `LAB_PORT_INSPECTOR_2` and `LAB_PORT_INSPECTOR_WORKER`.
 
 ## Design decisions
 

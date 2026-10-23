@@ -74,7 +74,7 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: "The API process restarted {{ $value }} times in the last 15 minutes"
+          summary: "The API process restarted {{ $value }} times in the last 15 minutes (crashes and deploys alike: compare with the deploy annotations)"
 
       - alert: CheckoutSlow
         expr: |

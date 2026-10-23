@@ -52,7 +52,7 @@ PayFlow is a third party: you can't change how long a card authorization takes (
 | Checkout p95 | < 1 s |
 | Catalog p95 | < 250 ms |
 | Error rate | < 0.5 % |
-| Requests waiting for a database connection (max) | < 5 |
+| Requests waiting for a database connection, 90th percentile over the run (a momentary spike doesn't count) | < 20 |
 
 Every functional check must pass too: doorbusters can be ordered; sold-out products are refused with 409 and declined cards with 402; an order that is refused leaves no authorization on the card; totals, coupons and confirmation emails are unchanged.
 

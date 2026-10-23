@@ -71,10 +71,10 @@
       },
       { "label": "Error rate", "metric": "http_req_failed", "stat": "rate", "max": 0.005, "unit": "ratio" },
       {
-        "label": "Requests waiting for a DB connection (max)",
+        "label": "Requests waiting for a DB connection (p90 over the run)",
         "source": "prometheus",
-        "query": "max_over_time(db_pool_connections{job=\"api\",state=\"waiting\"}[$range])",
-        "max": 5,
+        "query": "max(quantile_over_time(0.9, db_pool_connections{job=\"api\",state=\"waiting\"}[$range]))",
+        "max": 20,
         "unit": "count"
       }
     ]

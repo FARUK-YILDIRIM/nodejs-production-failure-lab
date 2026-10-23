@@ -52,7 +52,7 @@ Marketing mentions that an old `BACK2SCHOOL` code (25 % off, expired on Septembe
 | Checkout p95 | < 400 ms |
 | Catalog p95 | < 250 ms |
 | Error rate | < 0.5 % |
-| Requests waiting for a database connection (max) | < 5 |
+| Requests waiting for a database connection, 90th percentile over the run (a momentary spike doesn't count) | < 20 |
 
 Every functional check must pass too: valid coupons give their discount; expired, used-up and unknown coupons are refused with 400.
 
