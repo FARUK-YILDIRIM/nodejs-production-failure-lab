@@ -26,7 +26,10 @@ export interface Slo {
    * as `timestamptz` values, e.g. `SELECT count(*) FROM orders WHERE created_at >= $start`.
    */
   query?: string;
-  max: number;
+  /** The value must be at most this (inclusive). */
+  max?: number;
+  /** The value must be at least this (inclusive), e.g. messages a fix must keep rather than drop. */
+  min?: number;
   unit: 'ms' | 'ratio' | 'count' | 'bytes/s';
 }
 

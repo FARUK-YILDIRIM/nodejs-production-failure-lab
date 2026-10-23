@@ -50,6 +50,17 @@ groups:
           summary: "PayFlow flagged possible duplicate charges in the last 10 minutes"
           description: "{{ $value | humanize }} card authorizations look like duplicates of another active one."
 
+      # Orders keep coming in, but no confirmation email has gone out (incidents with a worker).
+      - alert: ConfirmationsStuck
+        expr: |
+          sum(increase(order_confirmations_sent_total[10m])) == 0
+            and sum(increase(http_server_request_duration_seconds_count{job="api", route="/api/orders", method="POST", status_code="201"}[10m])) > 0
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: "No order confirmation sent for 10 minutes, while orders keep coming in"
+
       - alert: ApiDown
         expr: up{job="api"} == 0
         for: 1m

@@ -1,0 +1,78 @@
+diff --git a/incidents/015-stuck-queue/app/src/worker.ts b/incidents/015-stuck-queue/app/src/worker.ts
+index e930d7f..197532b 100644
+--- a/incidents/015-stuck-queue/app/src/worker.ts
++++ b/incidents/015-stuck-queue/app/src/worker.ts
+@@ -23,8 +23,18 @@ const confirmationDelay = new Histogram({
+   registers: [registry],
+ });
+ 
++const deadLettered = new Counter({
++  name: 'order_events_dead_lettered_total',
++  help: 'Order events the worker gave up on, parked in the dead-letter topic.',
++  registers: [registry],
++});
++
++/** Order events the worker gave up on, with the reason: someone looks at them, and replays them once fixed. */
++const DEAD_LETTER_TOPIC = `${ORDER_EVENTS_TOPIC}.dlq`;
++
+ const metricsServer = startMetricsServer(config.metricsPort);
+ const consumer = kafka.consumer({ groupId: 'order-confirmations' });
++const producer = kafka.producer();
+ 
+ /** Sends one order's confirmation email, and records that it went out. */
+ async function confirm(event: OrderPlaced): Promise<void> {
+@@ -42,17 +52,41 @@ async function confirm(event: OrderPlaced): Promise<void> {
+   confirmationDelay.observe((Date.now() - Date.parse(event.placedAt)) / 1000);
+ }
+ 
++await producer.connect();
+ await consumer.connect();
+ await consumer.subscribe({ topic: ORDER_EVENTS_TOPIC, fromBeginning: true });
+ await consumer.run({
+   // In order, one message at a time: order status emails (shipped, delivered) are
+   // coming, and must never overtake the confirmation. MailWave answers in ~90 ms
+   // again, so this keeps up with about 10 orders per second.
+-  eachMessage: async ({ message }) => {
+-    const event = JSON.parse(message.value?.toString() ?? '{}') as OrderPlaced;
+-    // No confirmation is dropped anymore: if it can't be sent, the message fails,
+-    // its offset isn't committed, and it's retried from the topic.
+-    await confirm(event);
++  eachMessage: async ({ topic, partition, message }) => {
++    try {
++      const event = JSON.parse(message.value?.toString() ?? '') as OrderPlaced;
++      await confirm(event);
++    } catch (err) {
++      // sendOrderConfirmation already retried MailWave's transient errors. Trying
++      // this message again won't change the answer, and would hold up every message
++      // behind it: park it in the dead-letter topic, with the reason, and move on.
++      // Nothing is dropped: it's waiting there for someone to fix and replay it.
++      await producer.send({
++        topic: DEAD_LETTER_TOPIC,
++        messages: [
++          {
++            key: message.key,
++            value: message.value,
++            headers: {
++              error: err instanceof Error ? err.message : String(err),
++              'source-topic': topic,
++              'source-partition': String(partition),
++              'source-offset': message.offset,
++              'failed-at': new Date().toISOString(),
++            },
++          },
++        ],
++      });
++      deadLettered.inc();
++      logger.error({ err, offset: message.offset }, 'order event parked in the dead-letter topic');
++    }
+   },
+ });
+ logger.info({ topic: ORDER_EVENTS_TOPIC, groupId: 'order-confirmations' }, 'worker consuming');
+@@ -64,6 +98,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
+   logger.info({ signal }, 'worker shutting down');
+   setTimeout(() => process.exit(1), 8_000).unref();
+   await consumer.disconnect();
++  await producer.disconnect();
+   metricsServer.close();
+   await pool.end();
+   process.exit(0);

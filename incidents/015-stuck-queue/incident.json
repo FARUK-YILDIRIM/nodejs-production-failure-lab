@@ -1,0 +1,79 @@
+{
+  "id": "015",
+  "title": "Stuck queue",
+  "difficulty": 3,
+  "estimatedTime": "45–75 min",
+  "summary": "Since early afternoon, no order confirmation email has gone out, for anyone.",
+  "alert": "[FIRING] ConfirmationsStuck: no order confirmation sent for 10 minutes",
+  "submit": {
+    "questions": [
+      {
+        "id": "why-stopped",
+        "type": "choice",
+        "prompt": "Why did confirmations stop?",
+        "choices": [
+          {
+            "id": "poison",
+            "label": "The worker is stuck on one message it can never send, retrying it forever, and every message behind it waits"
+          },
+          { "id": "mailwave-down", "label": "MailWave is down" },
+          { "id": "crashed", "label": "The worker crashed and doesn't restart" },
+          { "id": "too-slow", "label": "The worker is too slow again" },
+          { "id": "topic-full", "label": "The topic is full" }
+        ],
+        "answers": ["09c7609e6a12df5b1d8219226e37841d7d941b4122cfb39d2ea90aa4878cb849"]
+      },
+      {
+        "id": "why-fails",
+        "type": "choice",
+        "prompt": "Why can't that one message be sent?",
+        "choices": [
+          { "id": "invalid-email", "label": "Its customer's email address is invalid, and MailWave refuses it" },
+          { "id": "malformed", "label": "The message is malformed" },
+          { "id": "too-big", "label": "The message is too large" },
+          { "id": "rate-limited", "label": "MailWave rate-limits it" },
+          { "id": "missing-order", "label": "Its order doesn't exist" }
+        ],
+        "answers": ["1b1a6e9ed3af89bc9969baddcb67e6ab58629c083a142db187d39f0e6a9b94cc"]
+      },
+      {
+        "id": "what-to-do",
+        "type": "choice",
+        "prompt": "What should the worker do with a message it can't process?",
+        "choices": [
+          {
+            "id": "dead-letter",
+            "label": "Set it aside, with the reason, where someone can fix and replay it, and move on"
+          },
+          { "id": "retry", "label": "Retry it until it works" },
+          { "id": "drop", "label": "Drop it and log the error" },
+          { "id": "stop", "label": "Stop the worker, so that someone notices" },
+          { "id": "skip-partition", "label": "Skip to the end of the partition" }
+        ],
+        "answers": ["d42e59ca9465310eb37e112b480187adf2b6c4fc3c4f3dcb216df3e671f6bfc3"]
+      }
+    ]
+  },
+  "verify": {
+    "warmupSeconds": 15,
+    "durationSeconds": 60,
+    "slos": [
+      {
+        "label": "Confirmation email delay (p95)",
+        "source": "sql",
+        "query": "SELECT coalesce(round(1000 * percentile_cont(0.95) WITHIN GROUP (ORDER BY extract(epoch FROM coalesce(confirmation_sent_at, $end) - created_at))), 0) FROM orders WHERE created_at >= $start AND created_at < $end - interval '10 seconds'",
+        "max": 5000,
+        "unit": "ms"
+      },
+      {
+        "label": "Undeliverable confirmations parked in order-events.dlq",
+        "source": "prometheus",
+        "query": "sum(kafka_topic_partition_current_offset{topic=\"order-events.dlq\"})",
+        "min": 1,
+        "unit": "count"
+      }
+    ]
+  },
+  "services": ["api-1", "api-2", "worker"],
+  "resetServices": ["redpanda", "kafka-exporter"]
+}

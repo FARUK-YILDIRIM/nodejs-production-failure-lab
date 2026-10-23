@@ -60,7 +60,7 @@ Optional, for editor IntelliSense in the service code: `npm install` in the inci
 | 012 | [Errors on every deploy](incidents/012-errors-on-every-deploy/README.md) | ★★☆ | ✅ playable |
 | 013 | [Intermittent 503s](incidents/013-intermittent-503s/README.md) | ★★☆ | ✅ playable |
 | 014 | [Delayed confirmations](incidents/014-delayed-confirmations/README.md) | ★★★ | ✅ playable |
-| 015 | Stuck queue | ★★★ | 🛠 next |
+| 015 | [Stuck queue](incidents/015-stuck-queue/README.md) | ★★★ | ✅ playable |
 
 Incidents are named after their **symptoms**, never their causes, and difficulty doesn't tell you the category: real incidents don't arrive labeled "database problem". The longer roadmap covers the Node.js runtime, PostgreSQL, distributed systems (timeouts, retries, circuit breakers), messaging and Kafka, and platform limits.
 

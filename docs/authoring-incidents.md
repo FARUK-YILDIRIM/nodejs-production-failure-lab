@@ -61,7 +61,7 @@ Write it like a page from on-call: an alert, a message from Support, what you kn
   { "label": "Duplicate orders", "source": "sql", "query": "SELECT count(*) FROM orders WHERE created_at >= $start AND …", "max": 0, "unit": "count" }
   ```
 
-  `max` is inclusive: `"max": 0` with `"unit": "count"` reads as "= 0".
+  `max` is inclusive: `"max": 0` with `"unit": "count"` reads as "= 0". An SLO can set `min` instead, for things a fix must produce rather than avoid, such as messages parked in a dead-letter topic.
 
   Choose targets the broken code clearly misses and the reference fix clearly meets, with margin on both sides: measure each a few times. Lengthen `warmupSeconds`/`durationSeconds` when a signal needs time to settle (caches filling up, memory trends).
 

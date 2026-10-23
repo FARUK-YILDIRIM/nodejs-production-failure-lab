@@ -34,7 +34,14 @@ function formatSlo(slo: Slo, value: number | null | undefined): string {
   }
 }
 
-const formatTarget = (slo: Slo) => (slo.unit === 'count' && slo.max === 0 ? '= 0' : `< ${formatSlo(slo, slo.max)}`);
+function formatTarget(slo: Slo): string {
+  if (slo.unit === 'count' && slo.max === 0) return '= 0';
+  if (slo.max === undefined) return `≥ ${formatSlo(slo, slo.min)}`;
+  return `< ${formatSlo(slo, slo.max)}`;
+}
+
+const meets = (slo: Slo, value: number) =>
+  (slo.max === undefined || value <= slo.max) && (slo.min === undefined || value >= slo.min);
 
 function formatRuntime(unit: (typeof RUNTIME_METRICS)[number]['unit'], value: number | undefined): string {
   if (value === undefined) return dim('n/a');
@@ -55,7 +62,7 @@ function formatRuntime(unit: (typeof RUNTIME_METRICS)[number]['unit'], value: nu
 function printResults(incident: Incident, after: Measurement, before: Measurement | undefined): boolean[] {
   const verdicts = incident.verify.slos.map((slo, index) => {
     const value = after.slos[index];
-    return value !== null && value !== undefined && value <= slo.max;
+    return value !== null && value !== undefined && meets(slo, value);
   });
 
   const sloRows = incident.verify.slos.map((slo, index) => [
