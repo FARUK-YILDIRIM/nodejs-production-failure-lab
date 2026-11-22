@@ -3,7 +3,7 @@
 ## Layout
 
 ```
-node-production-failure-lab/
+nodejs-production-failure-lab/
 ├── lab                    # CLI entry point (bash → node cli/src/main.ts)
 ├── cli/src/               # the game: start, submit, verify, hints, scoring…
 ├── platform/              # shared by every incident

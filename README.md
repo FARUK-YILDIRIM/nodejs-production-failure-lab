@@ -1,4 +1,4 @@
-# Node Production Failure Lab
+# Node.js Production Failure Lab
 
 **Realistic Node.js production incidents you run on your laptop, investigate with real observability tools, and fix under measurement.** A CTF for backend engineers and SREs: instead of capturing a flag hidden in a binary, you capture a correct diagnosis and a fix that holds up under load.
 
@@ -33,8 +33,8 @@ Every incident follows the same loop: **observe → hypothesize → investigate 
 You need **Docker** (Docker Desktop with 6 GB of memory; the later incidents run more services, up to a message broker), **Node.js 22.18+** (24 recommended) and **git**.
 
 ```bash
-git clone <this repository> node-production-failure-lab
-cd node-production-failure-lab
+git clone https://github.com/FARUK-YILDIRIM/nodejs-production-failure-lab.git
+cd nodejs-production-failure-lab
 ./lab start 001
 ```
 

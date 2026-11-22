@@ -1,5 +1,5 @@
 {
-  "name": "node-production-failure-lab",
+  "name": "nodejs-production-failure-lab",
   "version": "0.1.0",
   "description": "A CTF-style lab of realistic Node.js production incidents: break it, observe it, diagnose it, fix it, measure it.",
   "private": true,

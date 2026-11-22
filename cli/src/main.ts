@@ -16,7 +16,7 @@ import { LabError } from './lib/errors.ts';
 import { bold, dim, log } from './lib/ui.ts';
 
 const HELP = `
-${bold('Node Production Failure Lab')}: break, observe, diagnose and fix production incidents.
+${bold('Node.js Production Failure Lab')}: break, observe, diagnose and fix production incidents.
 
 ${bold('Usage')}  ./lab <command> [incident] [options]
 
