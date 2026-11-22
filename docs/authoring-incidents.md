@@ -106,7 +106,3 @@ Check the dashboards while it runs: are the symptoms visible? Is the evidence ch
 - `FIX.md`: mitigation, the fix with measured before/after numbers, alternatives and their trade-offs, prevention (including an alert rule).
 - `POSTMORTEM.md`: an example postmortem in the template's format.
 - `fix.patch`: `git diff` of the fix against the incident's `app/src`.
-
-## 9. CI
-
-Add the incident to the matrix in `.github/workflows/ci.yml`. CI starts it, expects the original code to fail its SLOs, applies `fix.patch`, and expects the fix to pass.
