@@ -4,7 +4,7 @@
 
 ## Summary
 
-For about an hour on the last business day of the quarter, a large share of ShopFlow API requests were delayed by up to three seconds; p95 latency at the edge rose from ~20 ms to ~1.8 s. The sales export, enriched the day before, ran seconds of synchronous CPU work per call and stalled the Node.js event loop for every other request. We paused exports, then shipped a fix that moved the enrichment into SQL and reused number formatters. The export became ~8× faster and p95 returned to ~15 ms.
+For about an hour on the last business day of the quarter, a large share of ShopFlow API requests were delayed by up to three seconds; p95 latency at the edge rose from ~20 ms to ~2 s. The sales export, enriched the day before, ran seconds of synchronous CPU work per call and stalled the Node.js event loop for every other request. We paused exports, then shipped a fix that moved the enrichment into SQL and reused number formatters. The export became ~8× faster and p95 returned to ~15 ms.
 
 ## Impact
 
@@ -44,11 +44,11 @@ The quarter-end close: Finance exported every few seconds. The code had been dep
 
 ## Evidence
 
-1. Edge p95 ~1.8 s while the API's own p95 for product routes was ~50 ms: time was lost before the handlers ran.
-2. Jaeger: product requests with ~1.5 s between the proxy span and the API span; `pg-pool.connect` spans of ~1.2 s next to 3–5 ms queries.
+1. Edge p95 ~2 s while the API's own p95 for product routes was ~50 ms: time was lost before the handlers ran.
+2. Jaeger: product requests with ~2.2 s between the proxy span and the API span; `pg-pool.connect` spans of ~1.2 s next to 3–5 ms queries.
 3. `pg_stat_statements`: mean query times of a few milliseconds; no slow-query logs.
 4. Event loop delay max 2–3 s (p99 only ~25 ms), utilization ~55 %, CPU ~0.5 cores at 38 req/s.
-5. Pyroscope: ~45 % of CPU in `formatMoney`, ~16 % in the `catalog.find` callback of `sales-report.ts`.
+5. Pyroscope: ~51 % of CPU in `formatMoney`, ~16 % in the `catalog.find` callback of `sales-report.ts`.
 
 ## Mitigation and fix
 

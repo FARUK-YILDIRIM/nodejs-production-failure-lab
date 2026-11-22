@@ -4,7 +4,7 @@
   "difficulty": 2,
   "estimatedTime": "45–75 min",
   "summary": "Product pages time out, while the rest of the site works fine.",
-  "alert": "[FIRING] ClientsGivingUp: clients give up on more than 1% of API requests before getting an answer (currently ~34 %)",
+  "alert": "[FIRING] ClientsGivingUp: clients give up on more than 1% of API requests before getting an answer (currently ~47 %)",
   "submit": {
     "questions": [
       {

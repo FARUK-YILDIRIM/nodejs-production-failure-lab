@@ -2,7 +2,7 @@
 
 **Difficulty** ★☆☆ · **Time** 30–60 min · **Service** `shopflow-api`
 
-> 🔥 **[FIRING] ApiHighLatencyP95**: `shopflow-api` p95 latency at the edge is above 500 ms (currently ~1.8 s)
+> 🔥 **[FIRING] ApiHighLatencyP95**: `shopflow-api` p95 latency at the edge is above 500 ms (currently ~2 s)
 
 ## The situation
 

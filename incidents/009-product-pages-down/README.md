@@ -2,7 +2,7 @@
 
 **Difficulty** ★★☆ · **Time** 45–75 min · **Service** `shopflow-api`
 
-> 🔥 **[FIRING] ClientsGivingUp**: clients give up on more than 1 % of API requests before getting an answer (currently ~34 %)
+> 🔥 **[FIRING] ClientsGivingUp**: clients give up on more than 1 % of API requests before getting an answer (currently ~47 %)
 
 ## The situation
 

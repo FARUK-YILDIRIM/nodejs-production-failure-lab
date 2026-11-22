@@ -28,14 +28,14 @@ A request for `/api/products/42` needs ~5 ms of CPU and two fast queries. If it 
 
 | Observation | Where | What it means |
 |---|---|---|
-| Edge p95 ≈ 1.8 s, but the API's own p95 for `/api/products/:id` is ~50 ms | Dashboard: *Latency at the edge* vs. *Latency measured by the API* | The time is lost *before* the API starts measuring: requests wait to be picked up. |
-| In a slow product trace, the `traefik` span starts at 0 and the API's span only ~1.5 s later | Jaeger | The same thing for a single request: 1.5 s queued in front of the event loop. |
+| Edge p95 ≈ 2 s, but the API's own p95 for `/api/products/:id` is ~50 ms | Dashboard: *Latency at the edge* vs. *Latency measured by the API* | The time is lost *before* the API starts measuring: requests wait to be picked up. |
+| In a slow product trace, the `traefik` span starts at 0 and the API's span only ~2.2 s later | Jaeger | The same thing for a single request: ~2.2 s queued in front of the event loop. |
 | `pg-pool.connect` spans of ~1.2 s; up to 64 requests waiting for a connection | Jaeger, *Database connection pool* panel | A red herring. The pool hands out connections in microseconds, but the callback receiving one couldn't run. Requests pile up during a block and rush the pool when it ends. |
 | Mean query times of a few ms in `pg_stat_statements`; no slow-query logs | Dashboard table, `./lab psql`, `docker compose logs postgres` | The database is healthy. The export query's `max_exec_time` can reach seconds, because Postgres waits when its client stops reading results: a side effect, not the cause. |
 | Event loop delay **max** of 2–3 s while **p99** stays around 25 ms | *Event loop delay* panel | The loop blocks a few times per minute, for seconds. Percentiles over thousands of 10 ms samples hide rare long stalls; `max` shows them. |
 | Event loop utilization ~55 %, CPU ~0.5 cores at only ~38 req/s | Runtime panels | Far more CPU than these endpoints should need. |
 | `GET /api/reports/sales` is slow by itself (2–3 s), with a long stretch and no child spans after its two queries | Jaeger, longest traces first | The time goes into uninstrumented synchronous code. |
-| ~45 % of CPU self-time in `formatMoney` (`shared/money.ts`) and ~16 % in the `catalog.find` callback (`reports/sales-report.ts`) | Drilldown → Profiles, `wall/cpu` | The exact lines. |
+| ~51 % of CPU self-time in `formatMoney` (`shared/money.ts`) and ~16 % in the `catalog.find` callback (`reports/sales-report.ts`) | Drilldown → Profiles, `wall/cpu` | The exact lines. |
 | v2.15.0 added catalog enrichment and price formatting to the export, the evening before | `app/CHANGELOG.md` | The change that introduced it. |
 
 ## Trigger vs. root cause
